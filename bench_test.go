@@ -20,7 +20,7 @@ func benchCmapSetGet(b *testing.B, sz int) {
 		}
 	})
 	if testing.Verbose() {
-		var shardCounts [DefaultShardCount]int
+		shardCounts := make([]int, sz)
 		for i := range cm {
 			shardCounts[i] = cm[i].Len()
 		}
