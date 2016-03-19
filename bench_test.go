@@ -10,6 +10,7 @@ import (
 func benchCmapSetGet(b *testing.B, sz int) {
 	cm := NewSize(sz)
 	var i uint64
+	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			x := strconv.FormatUint(atomic.AddUint64(&i, 1), 10)

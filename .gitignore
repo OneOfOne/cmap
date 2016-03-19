@@ -1,3 +1,2 @@
-old.txt
-new.txt
+*.txt
 *.pprof
