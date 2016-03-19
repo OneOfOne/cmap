@@ -34,4 +34,5 @@ func BenchmarkSRCMap32Shards(b *testing.B)  { benchSRCmapSetGet(b, 32) }
 func BenchmarkSRCMap64Shards(b *testing.B)  { benchSRCmapSetGet(b, 64) }
 func BenchmarkSRCMap128Shards(b *testing.B) { benchSRCmapSetGet(b, 128) }
 func BenchmarkSRCMap256Shards(b *testing.B) { benchSRCmapSetGet(b, 256) }
-func BenchmarkSRCMap512Shards(b *testing.B) { benchSRCmapSetGet(b, 512) }
+
+// func BenchmarkSRCMap512Shards(b *testing.B) { benchSRCmapSetGet(b, 512) }

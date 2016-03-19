@@ -68,7 +68,10 @@ func (ms *MapShard) Foreach(fn ForeachFunc) {
 	ms.l.RUnlock()
 }
 
-type CMap []MapShard
+type CMap struct {
+	shards []MapShard
+	l      uint64
+}
 
 // New is an alias for NewSize(DefaultShardCount)
 func New() CMap { return NewSize(DefaultShardCount) }
@@ -80,9 +83,12 @@ func NewSize(shardCount int) CMap {
 	} else if shardCount&(shardCount-1) != 0 {
 		panic("shardCount must be a power of 2")
 	}
-	cm := make(CMap, shardCount)
-	for i := range cm {
-		cm[i].m = make(map[string]interface{}, shardCount/2)
+	cm := CMap{
+		shards: make([]MapShard, shardCount),
+		l:      uint64(shardCount) - 1,
+	}
+	for i := range cm.shards {
+		cm.shards[i].m = make(map[string]interface{}, shardCount/2)
 	}
 	return cm
 }
@@ -91,7 +97,7 @@ func NewSize(shardCount int) CMap {
 
 func (cm CMap) Shard(key string) *MapShard {
 	h := cmapHashString(key)
-	return &cm[h&uint64(len(cm)-1)]
+	return &cm.shards[h&cm.l]
 }
 
 func (cm CMap) Set(key string, val interface{})     { cm.Shard(key).Set(key, val) }
@@ -101,17 +107,17 @@ func (cm CMap) Delete(key string)                   { cm.Shard(key).Delete(key) 
 func (cm CMap) DeleteAndGet(key string) interface{} { return cm.Shard(key).DeleteAndGet(key) }
 
 func (cm CMap) Foreach(fn ForeachFunc) {
-	for i := range cm {
-		cm[i].Foreach(fn)
+	for i := range cm.shards {
+		cm.shards[i].Foreach(fn)
 	}
 }
 
 func (cm CMap) ForeachParallel(fn ForeachFunc) {
 	var wg sync.WaitGroup
-	wg.Add(len(cm))
-	for i := range cm {
+	wg.Add(len(cm.shards))
+	for i := range cm.shards {
 		go func(i int) {
-			cm[i].Foreach(fn)
+			cm.shards[i].Foreach(fn)
 			wg.Done()
 		}(i)
 	}
@@ -131,13 +137,13 @@ func (cm CMap) Iter() <-chan *KeyValue {
 
 // IterBuffered returns a buffered channal shardCount * sz, to return an unbuffered channel you can pass 0
 func (cm CMap) IterBuffered(sz int) <-chan *KeyValue {
-	ch := make(chan *KeyValue, len(cm)*sz)
+	ch := make(chan *KeyValue, len(cm.shards)*sz)
 	go func() {
 		var wg sync.WaitGroup
-		wg.Add(len(cm))
-		for i := range cm {
+		wg.Add(len(cm.shards))
+		for i := range cm.shards {
 			go func(i int) {
-				sh := &cm[i]
+				sh := &cm.shards[i]
 				sh.l.RLock()
 				for k, v := range sh.m {
 					kv := &KeyValue{k, v, false}
@@ -162,8 +168,8 @@ func (cm CMap) iter(ch chan<- *KeyValue) {
 
 func (cm CMap) Len() int {
 	ln := 0
-	for i := range cm {
-		ln += cm[i].Len()
+	for i := range cm.shards {
+		ln += cm.shards[i].Len()
 	}
 	return ln
 }

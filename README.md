@@ -34,28 +34,26 @@ func main() {
 
 ## Benchmark
 ```bash
-➜ go test -bench=. -benchmem -tags streamrail -benchtime 3s
+➜ go test -bench=. -benchmem -tags streamrail -benchtime 5s
 testing: warning: no tests to run
 # this package
-BenchmarkCMap8Shards-8          10000000               545 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap16Shards-8         10000000               462 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap32Shards-8         10000000               428 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap64Shards-8         10000000               485 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap128Shards-8        10000000               415 ns/op             154 B/op          2 allocs/op
-BenchmarkCMap256Shards-8        10000000               384 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap512Shards-8        20000000               453 ns/op             154 B/op          2 allocs/op
+BenchmarkCMap8Shards-8          10000000               591 ns/op             153 B/op          2 allocs/op
+BenchmarkCMap16Shards-8         20000000               492 ns/op             153 B/op          2 allocs/op
+BenchmarkCMap32Shards-8         20000000               446 ns/op             153 B/op          2 allocs/op
+BenchmarkCMap64Shards-8         20000000               362 ns/op             153 B/op          2 allocs/op
+BenchmarkCMap128Shards-8        20000000               368 ns/op             153 B/op          2 allocs/op
+BenchmarkCMap256Shards-8        20000000               320 ns/op             153 B/op          2 allocs/op
 
 # simple RWMutex-guarded map
-BenchmarkMutexMap-8              5000000               786 ns/op             153 B/op          2 allocs/op
+BenchmarkMutexMap-8             10000000               901 ns/op             153 B/op          2 allocs/op
 
 # https://github.com/streamrail/concurrent-map
-BenchmarkSRCMap8Shards-8         5000000               809 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap16Shards-8       10000000               665 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap32Shards-8       10000000               627 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap64Shards-8       10000000               491 ns/op             154 B/op          2 allocs/op
-BenchmarkSRCMap128Shards-8      10000000               404 ns/op             154 B/op          2 allocs/op
-BenchmarkSRCMap256Shards-8      10000000               400 ns/op             154 B/op          2 allocs/op
-BenchmarkSRCMap512Shards-8      20000000               387 ns/op             154 B/op          2 allocs/op
+BenchmarkSRCMap8Shards-8        10000000               772 ns/op             153 B/op          2 allocs/op
+BenchmarkSRCMap16Shards-8       10000000               710 ns/op             153 B/op          2 allocs/op
+BenchmarkSRCMap32Shards-8       20000000               632 ns/op             153 B/op          2 allocs/op
+BenchmarkSRCMap64Shards-8       20000000               495 ns/op             153 B/op          2 allocs/op
+BenchmarkSRCMap128Shards-8      20000000               420 ns/op             154 B/op          2 allocs/op
+BenchmarkSRCMap256Shards-8      20000000               388 ns/op             154 B/op          2 allocs/op
 PASS
 ok      github.com/OneOfOne/cmap        88.383s
 ```

@@ -21,8 +21,8 @@ func benchCmapSetGet(b *testing.B, sz int) {
 	})
 	if testing.Verbose() {
 		shardCounts := make([]int, sz)
-		for i := range cm {
-			shardCounts[i] = cm[i].Len()
+		for i := range cm.shards {
+			shardCounts[i] = cm.shards[i].Len()
 		}
 		b.Logf("size: %v: %v", cm.Len(), shardCounts)
 	}
@@ -34,7 +34,8 @@ func BenchmarkCMap32Shards(b *testing.B)  { benchCmapSetGet(b, 32) }
 func BenchmarkCMap64Shards(b *testing.B)  { benchCmapSetGet(b, 64) }
 func BenchmarkCMap128Shards(b *testing.B) { benchCmapSetGet(b, 128) }
 func BenchmarkCMap256Shards(b *testing.B) { benchCmapSetGet(b, 256) }
-func BenchmarkCMap512Shards(b *testing.B) { benchCmapSetGet(b, 512) }
+
+// func BenchmarkCMap512Shards(b *testing.B) { benchCmapSetGet(b, 512) }
 
 type mutexMap struct {
 	sync.RWMutex

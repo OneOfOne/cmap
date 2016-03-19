@@ -4,8 +4,8 @@ import "testing"
 
 func TestAll(t *testing.T) {
 	cm := New()
-	if len(cm) != DefaultShardCount {
-		t.Fatalf("wanted len(cm) == %v, got %v", DefaultShardCount, len(cm))
+	if len(cm.shards) != DefaultShardCount {
+		t.Fatalf("wanted len(cm) == %v, got %v", DefaultShardCount, len(cm.shards))
 	}
 
 	cm.Set("key", "value")
