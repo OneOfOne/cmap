@@ -7,8 +7,9 @@ import (
 	"testing"
 )
 
-func benchCmapSetGet(b *testing.B, sz int) {
+func benchCmapSetGet(b *testing.B, hfn func(string) uint64, sz int) {
 	cm := NewSize(sz)
+	cm.HashFn = hfn
 	var i uint64
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -29,12 +30,12 @@ func benchCmapSetGet(b *testing.B, sz int) {
 	}
 }
 
-func BenchmarkCMap8Shards(b *testing.B)   { benchCmapSetGet(b, 8) }
-func BenchmarkCMap16Shards(b *testing.B)  { benchCmapSetGet(b, 16) }
-func BenchmarkCMap32Shards(b *testing.B)  { benchCmapSetGet(b, 32) }
-func BenchmarkCMap64Shards(b *testing.B)  { benchCmapSetGet(b, 64) }
-func BenchmarkCMap128Shards(b *testing.B) { benchCmapSetGet(b, 128) }
-func BenchmarkCMap256Shards(b *testing.B) { benchCmapSetGet(b, 256) }
+func BenchmarkCMap8Shards(b *testing.B)   { benchCmapSetGet(b, FNV64aString, 8) }
+func BenchmarkCMap16Shards(b *testing.B)  { benchCmapSetGet(b, FNV64aString, 16) }
+func BenchmarkCMap32Shards(b *testing.B)  { benchCmapSetGet(b, FNV64aString, 32) }
+func BenchmarkCMap64Shards(b *testing.B)  { benchCmapSetGet(b, FNV64aString, 64) }
+func BenchmarkCMap128Shards(b *testing.B) { benchCmapSetGet(b, FNV64aString, 128) }
+func BenchmarkCMap256Shards(b *testing.B) { benchCmapSetGet(b, FNV64aString, 256) }
 
 // func BenchmarkCMap512Shards(b *testing.B) { benchCmapSetGet(b, 512) }
 

@@ -71,6 +71,7 @@ func (ms *MapShard) Foreach(fn ForeachFunc) {
 type CMap struct {
 	shards []MapShard
 	l      uint64
+	HashFn func(s string) uint64 // HashFn returns a hash used to select which shard to map a key to.
 }
 
 // New is an alias for NewSize(DefaultShardCount)
@@ -86,6 +87,7 @@ func NewSize(shardCount int) CMap {
 	cm := CMap{
 		shards: make([]MapShard, shardCount),
 		l:      uint64(shardCount) - 1,
+		HashFn: FNV64aString,
 	}
 	for i := range cm.shards {
 		cm.shards[i].m = make(map[string]interface{}, shardCount/2)
@@ -96,7 +98,7 @@ func NewSize(shardCount int) CMap {
 // if you customize this map, you must define your own cmapHash<KeyType>
 
 func (cm CMap) Shard(key string) *MapShard {
-	h := cmapHashString(key)
+	h := cm.HashFn(key)
 	return &cm.shards[h&cm.l]
 }
 
