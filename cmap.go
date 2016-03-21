@@ -11,7 +11,7 @@ var Break = errors.New(":break:")
 const DefaultShardCount = 1 << 8 // 256
 
 // ForeachFunc is a function that gets passed to Foreach, returns true to break early
-type ForeachFunc func(key string, val interface{}) (BreakEarly bool)
+type ForEachFunc func(key string, val interface{}) (BreakEarly bool)
 
 type MapShard struct {
 	m map[string]interface{}
@@ -59,7 +59,7 @@ func (ms *MapShard) Len() int {
 	return ln
 }
 
-func (ms *MapShard) Foreach(fn ForeachFunc) {
+func (ms *MapShard) ForEach(fn ForEachFunc) {
 	ms.l.RLock()
 	for k, v := range ms.m {
 		if !fn(k, v) {
@@ -72,11 +72,7 @@ func (ms *MapShard) Foreach(fn ForeachFunc) {
 func (ms *MapShard) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
 	var kv KeyValue
 	ms.l.RLock()
-	defer func() {
-		recover() // ugly ugly hack
-		ms.l.RUnlock()
-		wg.Done()
-	}()
+	defer func() { recover(); ms.l.RUnlock(); wg.Done() }()
 	for k, v := range ms.m {
 		kv.Key, kv.Value = k, v
 		ch <- &kv
@@ -110,8 +106,6 @@ func NewSize(shardCount int) CMap {
 	return cm
 }
 
-// if you customize this map, you must define your own cmapHash<KeyType>
-
 func (cm CMap) Shard(key string) *MapShard {
 	h := cm.HashFn(key)
 	return &cm.shards[h&cm.l]
@@ -123,22 +117,21 @@ func (cm CMap) Has(key string) bool                 { return cm.Shard(key).Has(k
 func (cm CMap) Delete(key string)                   { cm.Shard(key).Delete(key) }
 func (cm CMap) DeleteAndGet(key string) interface{} { return cm.Shard(key).DeleteAndGet(key) }
 
-func (cm CMap) Foreach(fn ForeachFunc) {
+func (cm CMap) Foreach(fn ForEachFunc) {
 	for i := range cm.shards {
-		cm.shards[i].Foreach(fn)
+		cm.shards[i].ForEach(fn)
 	}
 }
 
-func (cm CMap) ForeachParallel(fn ForeachFunc) {
+func (cm CMap) ForEachParallel(fn ForEachFunc) {
 	var (
 		wg   sync.WaitGroup
 		exit uint32
 	)
 	wg.Add(len(cm.shards))
-
 	for i := range cm.shards {
 		go func(i int) {
-			cm.shards[i].Foreach(func(k string, v interface{}) bool {
+			cm.shards[i].ForEach(func(k string, v interface{}) bool {
 				if atomic.LoadUint32(&exit) == 1 {
 					return true
 				}

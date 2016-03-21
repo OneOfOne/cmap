@@ -32,9 +32,12 @@ func TestIter(t *testing.T) {
 		cm.Set(k, k)
 	}
 	ch, breakFn := cm.IterBuffered(20)
-	for kv := range ch {
-		t.Logf("%+v", kv)
+	cnt := 0
+	for range ch {
+		cnt++
 		breakFn()
 	}
-	_ = breakFn
+	if cnt != 1 {
+		t.Fatalf("expected only 1 value, got %v", cnt)
+	}
 }
