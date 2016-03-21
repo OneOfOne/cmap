@@ -3,6 +3,7 @@ package cmap
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 )
 
 var Break = errors.New(":break:")
@@ -13,8 +14,8 @@ const DefaultShardCount = 1 << 8 // 256
 type ForeachFunc func(key string, val interface{}) (BreakEarly bool)
 
 type MapShard struct {
-	l sync.RWMutex
 	m map[string]interface{}
+	l sync.RWMutex
 }
 
 func (ms *MapShard) Set(key string, v interface{}) {
@@ -68,6 +69,20 @@ func (ms *MapShard) Foreach(fn ForeachFunc) {
 	ms.l.RUnlock()
 }
 
+func (ms *MapShard) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
+	var kv KeyValue
+	ms.l.RLock()
+	defer func() {
+		recover() // ugly ugly hack
+		ms.l.RUnlock()
+		wg.Done()
+	}()
+	for k, v := range ms.m {
+		kv.Key, kv.Value = k, v
+		ch <- &kv
+	}
+}
+
 type CMap struct {
 	shards []MapShard
 	l      uint64
@@ -115,11 +130,24 @@ func (cm CMap) Foreach(fn ForeachFunc) {
 }
 
 func (cm CMap) ForeachParallel(fn ForeachFunc) {
-	var wg sync.WaitGroup
+	var (
+		wg   sync.WaitGroup
+		exit uint32
+	)
 	wg.Add(len(cm.shards))
+
 	for i := range cm.shards {
 		go func(i int) {
-			cm.shards[i].Foreach(fn)
+			cm.shards[i].Foreach(func(k string, v interface{}) bool {
+				if atomic.LoadUint32(&exit) == 1 {
+					return true
+				}
+				b := fn(k, v)
+				if b {
+					atomic.StoreUint32(&exit, 1)
+				}
+				return b
+			})
 			wg.Done()
 		}(i)
 	}
@@ -129,43 +157,34 @@ func (cm CMap) ForeachParallel(fn ForeachFunc) {
 type KeyValue struct {
 	Key   string
 	Value interface{}
-	Break bool
 }
 
 // Iter is an alias for IterBuffered(0)
-func (cm CMap) Iter() <-chan *KeyValue {
+func (cm CMap) Iter() (<-chan *KeyValue, func()) {
 	return cm.IterBuffered(0)
 }
 
 // IterBuffered returns a buffered channal shardCount * sz, to return an unbuffered channel you can pass 0
-func (cm CMap) IterBuffered(sz int) <-chan *KeyValue {
+// calling breakLoop will close the channel and consume any remaining values in it.
+func (cm CMap) IterBuffered(sz int) (_ <-chan *KeyValue, breakLoop func()) {
 	ch := make(chan *KeyValue, len(cm.shards)*sz)
 	go func() {
+		defer func() { recover() }()
 		var wg sync.WaitGroup
 		wg.Add(len(cm.shards))
 		for i := range cm.shards {
-			go func(i int) {
-				sh := &cm.shards[i]
-				sh.l.RLock()
-				for k, v := range sh.m {
-					kv := &KeyValue{k, v, false}
-					ch <- kv
-					if kv.Break {
-						break
-					}
-				}
-				sh.l.RUnlock()
-				wg.Done()
-			}(i)
+			go cm.shards[i].iter(ch, &wg)
 		}
 		wg.Wait()
 		close(ch)
+		ch = nil
 	}()
-	return ch
-}
-
-func (cm CMap) iter(ch chan<- *KeyValue) {
-
+	return ch, func() {
+		defer func() { recover() }()
+		close(ch)
+		for range ch {
+		}
+	}
 }
 
 func (cm CMap) Len() int {
