@@ -22,9 +22,10 @@ func main() {
 	if v, ok := cm.Get("key").(string); ok {
 		// do something with v
 	}
-	for kv := range cmap.Iter() {
+	it, breakFn := cmap.Iter()
+	for kv := range it {
 		if kv.Key == "key" {
-			kv.Break = true
+			breakFn()
 			break
 		}
 	}

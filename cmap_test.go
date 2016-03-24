@@ -1,6 +1,8 @@
 package cmap
 
 import (
+	"bytes"
+	"encoding/json"
 	"strconv"
 	"testing"
 )
@@ -40,4 +42,37 @@ func TestIter(t *testing.T) {
 	if cnt != 1 {
 		t.Fatalf("expected only 1 value, got %v", cnt)
 	}
+}
+
+func TestJSON(t *testing.T) {
+	cm := New()
+	for i := 0; i < 100; i++ {
+		cm.Set(strconv.Itoa(i), i)
+	}
+	j, err := json.Marshal(cm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ncm, err := NewFromJSON(bytes.NewReader(j), func(v interface{}) interface{} {
+		if v.(json.Number) == "99" {
+			return IgnoreValue
+		}
+		return jsonNumberToInt(v)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ln := ncm.Len(); ln != cm.Len()-1 {
+		t.Fatalf("wanted %d len, got %d", cm.Len()-1, ln)
+	}
+	for i := 0; i < 99; i++ { // 99 because we dropped 99
+		if v, ok := ncm.Get(strconv.Itoa(i)).(int); !ok || v != i {
+			t.Fatalf("wanted %v, got %v", i, v)
+		}
+	}
+}
+
+func jsonNumberToInt(v interface{}) int {
+	n, _ := v.(json.Number).Int64()
+	return int(n)
 }

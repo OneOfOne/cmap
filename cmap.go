@@ -1,14 +1,18 @@
 package cmap
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"sync"
 	"sync/atomic"
 )
 
-var Break = errors.New(":break:")
+// IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
+var IgnoreValue = errors.New("ignore")
 
-const DefaultShardCount = 1 << 8 // 256
+const DefaultShardCount = 1 << 4 // 16
 
 // ForeachFunc is a function that gets passed to Foreach, returns true to break early
 type ForEachFunc func(key string, val interface{}) (BreakEarly bool)
@@ -62,7 +66,7 @@ func (ms *MapShard) Len() int {
 func (ms *MapShard) ForEach(fn ForEachFunc) {
 	ms.l.RLock()
 	for k, v := range ms.m {
-		if !fn(k, v) {
+		if fn(k, v) {
 			break
 		}
 	}
@@ -82,7 +86,6 @@ func (ms *MapShard) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
 type CMap struct {
 	shards []MapShard
 	l      uint64
-	HashFn func(s string) uint64 // HashFn returns a hash used to select which shard to map a key to.
 }
 
 // New is an alias for NewSize(DefaultShardCount)
@@ -98,7 +101,6 @@ func NewSize(shardCount int) CMap {
 	cm := CMap{
 		shards: make([]MapShard, shardCount),
 		l:      uint64(shardCount) - 1,
-		HashFn: FNV64aString,
 	}
 	for i := range cm.shards {
 		cm.shards[i].m = make(map[string]interface{}, shardCount/2)
@@ -106,8 +108,46 @@ func NewSize(shardCount int) CMap {
 	return cm
 }
 
+// NewFromJSON is an alias for NewSizeFromJSON(DefaultShardCount, r, fn)
+func NewFromJSON(r io.Reader, fn func(v interface{}) interface{}) (CMap, error) {
+	return NewSizeFromJSON(DefaultShardCount, r, fn)
+}
+
+// NewFromJSON returns a cmap constructed from json, fn will return the "proper" value, for example:
+// json by default reads all numbers as float64, so fn(v) where v is supposed to be an int should look like:
+// 	func(v interface{}) interface{} { n, _ := v.(json.Number).Int64(); return int(n) }
+// note that by default all numbers will be json.Number
+func NewSizeFromJSON(shardCount int, r io.Reader, fn func(v interface{}) interface{}) (CMap, error) {
+	cm := NewSize(shardCount)
+	dec := json.NewDecoder(r)
+	dec.UseNumber()
+	var key string
+	for dec.More() {
+		t, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return cm, err
+		}
+		if t, ok := t.(string); ok && key == "" {
+			key = t
+			continue
+		}
+
+		if key != "" {
+			if v := fn(t); v != IgnoreValue {
+				cm.Shard(key).m[key] = v // no need to use locks for this
+			}
+			key = ""
+		}
+	}
+
+	return cm, nil
+}
+
 func (cm CMap) Shard(key string) *MapShard {
-	h := cm.HashFn(key)
+	h := FNV64aString(key)
 	return &cm.shards[h&cm.l]
 }
 
@@ -153,14 +193,12 @@ type KeyValue struct {
 }
 
 // Iter is an alias for IterBuffered(0)
-func (cm CMap) Iter() (<-chan *KeyValue, func()) {
-	return cm.IterBuffered(0)
-}
+func (cm CMap) Iter() (<-chan *KeyValue, func()) { return cm.IterBuffered(0) }
 
-// IterBuffered returns a buffered channal shardCount * sz, to return an unbuffered channel you can pass 0
+// IterBuffered returns a buffered channel sz, to return an unbuffered channel you can pass 0
 // calling breakLoop will close the channel and consume any remaining values in it.
 func (cm CMap) IterBuffered(sz int) (_ <-chan *KeyValue, breakLoop func()) {
-	ch := make(chan *KeyValue, len(cm.shards)*sz)
+	ch := make(chan *KeyValue, sz)
 	go func() {
 		defer func() { recover() }()
 		var wg sync.WaitGroup
@@ -186,4 +224,21 @@ func (cm CMap) Len() int {
 		ln += cm.shards[i].Len()
 	}
 	return ln
+}
+
+func (cm CMap) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	enc := json.NewEncoder(&buf)
+	cm.Foreach(func(k string, v interface{}) bool {
+		buf.WriteString(`"` + k + `":`)
+		enc.Encode(v)
+		buf.Bytes()[buf.Len()-1] = ','
+		return false
+	})
+	if buf.Bytes()[buf.Len()-1] == ',' {
+		buf.Truncate(buf.Len() - 1)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }
