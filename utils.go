@@ -7,6 +7,7 @@ const (
 	prime64  uint64 = 1099511628211
 )
 
+// FNV64aString is a fnv64a hash without copying the value to a []byte
 func FNV64aString(s string) uint64 {
 	h := offset64
 	for i := 0; i < len(s); i++ {
@@ -16,6 +17,7 @@ func FNV64aString(s string) uint64 {
 	return h
 }
 
+// FNV32aString is a fnv32a hash without copying the value to a []byte
 func FNV32aString(s string) uint32 {
 	h := offset32
 	for i := 0; i < len(s); i++ {

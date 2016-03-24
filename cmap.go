@@ -3,52 +3,52 @@ package cmap
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
 )
 
 // IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
-var IgnoreValue = errors.New("ignore")
+var IgnoreValue = &struct{ bool }{true}
 
+// DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
 const DefaultShardCount = 1 << 4 // 16
 
 // ForeachFunc is a function that gets passed to Foreach, returns true to break early
 type ForEachFunc func(key string, val interface{}) (BreakEarly bool)
 
-type MapShard struct {
+type lockedMap struct {
 	m map[string]interface{}
 	l sync.RWMutex
 }
 
-func (ms *MapShard) Set(key string, v interface{}) {
+func (ms *lockedMap) Set(key string, v interface{}) {
 	ms.l.Lock()
 	ms.m[key] = v
 	ms.l.Unlock()
 }
 
-func (ms *MapShard) Get(key string) interface{} {
+func (ms *lockedMap) Get(key string) interface{} {
 	ms.l.RLock()
 	v := ms.m[key]
 	ms.l.RUnlock()
 	return v
 }
 
-func (ms *MapShard) Has(key string) bool {
+func (ms *lockedMap) Has(key string) bool {
 	ms.l.RLock()
 	_, ok := ms.m[key]
 	ms.l.RUnlock()
 	return ok
 }
 
-func (ms *MapShard) Delete(key string) {
+func (ms *lockedMap) Delete(key string) {
 	ms.l.Lock()
 	delete(ms.m, key)
 	ms.l.Unlock()
 }
 
-func (ms *MapShard) DeleteAndGet(key string) interface{} {
+func (ms *lockedMap) DeleteAndGet(key string) interface{} {
 	ms.l.Lock()
 	v := ms.m[key]
 	delete(ms.m, key)
@@ -56,14 +56,14 @@ func (ms *MapShard) DeleteAndGet(key string) interface{} {
 	return v
 }
 
-func (ms *MapShard) Len() int {
+func (ms *lockedMap) Len() int {
 	ms.l.RLock()
 	ln := len(ms.m)
 	ms.l.RUnlock()
 	return ln
 }
 
-func (ms *MapShard) ForEach(fn ForEachFunc) {
+func (ms *lockedMap) ForEach(fn ForEachFunc) {
 	ms.l.RLock()
 	for k, v := range ms.m {
 		if fn(k, v) {
@@ -73,7 +73,7 @@ func (ms *MapShard) ForEach(fn ForEachFunc) {
 	ms.l.RUnlock()
 }
 
-func (ms *MapShard) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
+func (ms *lockedMap) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
 	var kv KeyValue
 	ms.l.RLock()
 	defer func() { recover(); ms.l.RUnlock(); wg.Done() }()
@@ -83,14 +83,17 @@ func (ms *MapShard) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
 	}
 }
 
+// CMap is a sharded thread-safe concurrent map.
 type CMap struct {
-	shards []MapShard
+	shards []lockedMap
 	l      uint64
 }
 
 // New is an alias for NewSize(DefaultShardCount)
 func New() CMap { return NewSize(DefaultShardCount) }
 
+// NewSize returns a CMap with the specific shardSize, note that for performance reasons,
+// shardCount must be a power of 2
 func NewSize(shardCount int) CMap {
 	// must be a power of 2
 	if shardCount == 0 {
@@ -99,7 +102,7 @@ func NewSize(shardCount int) CMap {
 		panic("shardCount must be a power of 2")
 	}
 	cm := CMap{
-		shards: make([]MapShard, shardCount),
+		shards: make([]lockedMap, shardCount),
 		l:      uint64(shardCount) - 1,
 	}
 	for i := range cm.shards {
@@ -137,7 +140,7 @@ func NewSizeFromJSON(shardCount int, r io.Reader, fn func(v interface{}) interfa
 
 		if key != "" {
 			if v := fn(t); v != IgnoreValue {
-				cm.Shard(key).m[key] = v // no need to use locks for this
+				cm.shard(key).m[key] = v // no need to use locks for this
 			}
 			key = ""
 		}
@@ -146,16 +149,16 @@ func NewSizeFromJSON(shardCount int, r io.Reader, fn func(v interface{}) interfa
 	return cm, nil
 }
 
-func (cm CMap) Shard(key string) *MapShard {
+func (cm CMap) shard(key string) *lockedMap {
 	h := FNV64aString(key)
 	return &cm.shards[h&cm.l]
 }
 
-func (cm CMap) Set(key string, val interface{})     { cm.Shard(key).Set(key, val) }
-func (cm CMap) Get(key string) interface{}          { return cm.Shard(key).Get(key) }
-func (cm CMap) Has(key string) bool                 { return cm.Shard(key).Has(key) }
-func (cm CMap) Delete(key string)                   { cm.Shard(key).Delete(key) }
-func (cm CMap) DeleteAndGet(key string) interface{} { return cm.Shard(key).DeleteAndGet(key) }
+func (cm CMap) Set(key string, val interface{})     { cm.shard(key).Set(key, val) }
+func (cm CMap) Get(key string) interface{}          { return cm.shard(key).Get(key) }
+func (cm CMap) Has(key string) bool                 { return cm.shard(key).Has(key) }
+func (cm CMap) Delete(key string)                   { cm.shard(key).Delete(key) }
+func (cm CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).DeleteAndGet(key) }
 
 func (cm CMap) Foreach(fn ForEachFunc) {
 	for i := range cm.shards {
