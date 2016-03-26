@@ -22,14 +22,12 @@ func main() {
 	if v, ok := cm.Get("key").(string); ok {
 		// do something with v
 	}
-	it, breakFn := cmap.Iter()
-	for kv := range it {
+	it := cmap.Iter()
+	for v := it.Recv(); v != nil; v = it.Recv() {
 		if kv.Key == "key" {
-			breakFn()
-			break
+			it.Break()
 		}
 	}
-	NewSize(DefaultShardCount)
 }
 ```
 

@@ -6,6 +6,8 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+
+	"github.com/OneOfOne/lfchan"
 )
 
 // IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
@@ -73,14 +75,17 @@ func (ms *lockedMap) ForEach(fn ForEachFunc) {
 	ms.l.RUnlock()
 }
 
-func (ms *lockedMap) iter(ch chan *KeyValue, wg *sync.WaitGroup) {
+func (ms *lockedMap) iter(ch KeyValueChan, wg *sync.WaitGroup) {
 	var kv KeyValue
 	ms.l.RLock()
-	defer func() { recover(); ms.l.RUnlock(); wg.Done() }()
 	for k, v := range ms.m {
 		kv.Key, kv.Value = k, v
-		ch <- &kv
+		if !ch.ch.Send(&kv, true) {
+			break
+		}
 	}
+	ms.l.RUnlock()
+	wg.Done()
 }
 
 // CMap is a sharded thread-safe concurrent map.
@@ -121,6 +126,7 @@ func NewFromJSON(r io.Reader, fn func(v interface{}) interface{}) (CMap, error) 
 // 	func(v interface{}) interface{} { n, _ := v.(json.Number).Int64(); return int(n) }
 // note that by default all numbers will be json.Number
 func NewSizeFromJSON(shardCount int, r io.Reader, fn func(v interface{}) interface{}) (CMap, error) {
+	//TODO use json.RawMessage
 	cm := NewSize(shardCount)
 	dec := json.NewDecoder(r)
 	dec.UseNumber()
@@ -195,30 +201,25 @@ type KeyValue struct {
 	Value interface{}
 }
 
-// Iter is an alias for IterBuffered(0)
-func (cm CMap) Iter() (<-chan *KeyValue, func()) { return cm.IterBuffered(0) }
+// Iter is an alias for IterBuffered(1)
+func (cm CMap) Iter() KeyValueChan { return cm.IterBuffered(1) }
 
-// IterBuffered returns a buffered channel sz, to return an unbuffered channel you can pass 0
+// IterBuffered returns a buffered channel sz, to return an unbuffered channel you can pass 1
 // calling breakLoop will close the channel and consume any remaining values in it.
-func (cm CMap) IterBuffered(sz int) (_ <-chan *KeyValue, breakLoop func()) {
-	ch := make(chan *KeyValue, sz)
+// note that calling breakLoop() will show as a race on the race detector but it's more or less a "safe" race,
+// and it is the only clean way to break out of a channel.
+func (cm CMap) IterBuffered(sz int) KeyValueChan {
+	ch := KeyValueChan{lfchan.NewSize(sz)}
 	go func() {
-		defer func() { recover() }()
 		var wg sync.WaitGroup
 		wg.Add(len(cm.shards))
 		for i := range cm.shards {
 			go cm.shards[i].iter(ch, &wg)
 		}
 		wg.Wait()
-		close(ch)
-		ch = nil
+		ch.ch.Close()
 	}()
-	return ch, func() {
-		defer func() { recover() }()
-		close(ch)
-		for range ch {
-		}
-	}
+	return ch
 }
 
 func (cm CMap) Len() int {
@@ -244,4 +245,25 @@ func (cm CMap) MarshalJSON() ([]byte, error) {
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
+}
+
+type KeyValueChan struct {
+	ch *lfchan.Chan
+}
+
+func (kvch KeyValueChan) Recv() *KeyValue {
+	v, ok := kvch.ch.Recv(true)
+	if !ok {
+		return nil
+	}
+	return v.(*KeyValue)
+}
+
+func (kvch KeyValueChan) Break() {
+	kvch.ch.Close()
+	for {
+		if _, ok := kvch.ch.Recv(true); !ok {
+			return
+		}
+	}
 }

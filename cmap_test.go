@@ -33,11 +33,11 @@ func TestIter(t *testing.T) {
 		k := strconv.FormatUint(^i, 10)
 		cm.Set(k, k)
 	}
-	ch, breakFn := cm.IterBuffered(20)
+	ch := cm.IterBuffered(20)
 	cnt := 0
-	for range ch {
+	for v := ch.Recv(); v != nil; v = ch.Recv() {
 		cnt++
-		breakFn()
+		ch.Break()
 	}
 	if cnt != 1 {
 		t.Fatalf("expected only 1 value, got %v", cnt)
