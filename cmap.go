@@ -80,7 +80,7 @@ func (ms *lockedMap) iter(ch KeyValueChan, wg *sync.WaitGroup) {
 	ms.l.RLock()
 	for k, v := range ms.m {
 		kv.Key, kv.Value = k, v
-		if !ch.ch.Send(&kv, true) {
+		if !ch.v.Send(&kv, true) {
 			break
 		}
 	}
@@ -217,7 +217,7 @@ func (cm CMap) IterBuffered(sz int) KeyValueChan {
 			go cm.shards[i].iter(ch, &wg)
 		}
 		wg.Wait()
-		ch.ch.Close()
+		ch.Break()
 	}()
 	return ch
 }
@@ -248,21 +248,21 @@ func (cm CMap) MarshalJSON() ([]byte, error) {
 }
 
 type KeyValueChan struct {
-	ch *lfchan.Chan
+	v lfchan.Chan
 }
 
-func (kvch KeyValueChan) Recv() *KeyValue {
-	v, ok := kvch.ch.Recv(true)
+func (ch KeyValueChan) Recv() *KeyValue {
+	v, ok := ch.v.Recv(true)
 	if !ok {
 		return nil
 	}
 	return v.(*KeyValue)
 }
 
-func (kvch KeyValueChan) Break() {
-	kvch.ch.Close()
+func (ch KeyValueChan) Break() {
+	ch.v.Close()
 	for {
-		if _, ok := kvch.ch.Recv(true); !ok {
+		if _, ok := ch.v.Recv(true); !ok {
 			return
 		}
 	}
