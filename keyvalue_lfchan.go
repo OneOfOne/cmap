@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 type innerChan struct {
@@ -38,7 +39,7 @@ func (ch Chan) Send(v *KeyValue, block bool) bool {
 	if !block && ch.Len() == ch.Cap() {
 		return false
 	}
-	ncpu, ln, cnt := uint32(runtime.GOMAXPROCS(0)), uint32(len(ch.q)), uint32(0)
+	ln, cnt := uint32(len(ch.q)), uint32(0)
 	for !ch.Closed() {
 		if ch.Len() == ch.Cap() {
 			if !block {
@@ -53,7 +54,7 @@ func (ch Chan) Send(v *KeyValue, block bool) bool {
 			return true
 		}
 		if block {
-			if i%(ncpu*100) == 0 {
+			if i%250 == 0 {
 				pause(1)
 			}
 		} else if cnt++; cnt == ln {
@@ -66,13 +67,13 @@ func (ch Chan) Send(v *KeyValue, block bool) bool {
 
 func (ch Chan) Recv(block bool) (*KeyValue, bool) {
 	if !block && ch.Len() == 0 { // fast path
-		return nilValue, false
+		return zeroValue, false
 	}
-	ncpu, ln, cnt := uint32(runtime.GOMAXPROCS(0)), uint32(len(ch.q)), uint32(0)
+	ln, cnt := uint32(len(ch.q)), uint32(0)
 	for !ch.Closed() || ch.Len() > 0 {
 		if ch.Len() == 0 {
 			if !block {
-				return nilValue, false
+				return zeroValue, false
 			}
 			runtime.Gosched()
 			continue
@@ -83,7 +84,7 @@ func (ch Chan) Recv(block bool) (*KeyValue, bool) {
 			return v, true
 		}
 		if block {
-			if i%(ncpu*100) == 0 {
+			if i%250 == 0 {
 				pause(1)
 			}
 		} else if cnt++; cnt == ln {
@@ -91,7 +92,7 @@ func (ch Chan) Recv(block bool) (*KeyValue, bool) {
 		}
 		runtime.Gosched()
 	}
-	return nilValue, false
+	return zeroValue, false
 }
 
 func (ch Chan) SendOnly() SendOnly { return SendOnly{ch} }
@@ -128,7 +129,7 @@ func SelectRecv(block bool, chans ...Receiver) (*KeyValue, bool) {
 			}
 		}
 		if !block {
-			return nilValue, false
+			return zeroValue, false
 		}
 		pause(1)
 	}
@@ -158,3 +159,22 @@ var (
 	_ Receiver = (*Chan)(nil)
 	_ Receiver = (*RecvOnly)(nil)
 )
+
+var zeroValue *KeyValue
+
+type aValue struct {
+	v *KeyValue
+}
+
+func (a *aValue) CompareAndSwapIfNil(newVal *KeyValue) bool {
+	x := unsafe.Pointer(&a.v)
+	return atomic.CompareAndSwapPointer((*unsafe.Pointer)(atomic.LoadPointer(&x)), nil, unsafe.Pointer(&newVal))
+}
+
+func (a *aValue) SwapWithNil() (*KeyValue, bool) {
+	x := unsafe.Pointer(&a.v)
+	if v := atomic.SwapPointer((*unsafe.Pointer)(atomic.LoadPointer(&x)), nil); v != nil {
+		return *(**KeyValue)(v), true
+	}
+	return zeroValue, false
+}
