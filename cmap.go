@@ -1,3 +1,5 @@
+//go:generate go run "$GOPATH/src/github.com/OneOfOne/lfchan/gen.go" "*KeyValue" .
+
 package cmap
 
 import (
@@ -6,8 +8,6 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
-
-	"github.com/OneOfOne/lfchan"
 )
 
 // IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
@@ -209,7 +209,7 @@ func (cm CMap) Iter() KeyValueChan { return cm.IterBuffered(1) }
 // note that calling breakLoop() will show as a race on the race detector but it's more or less a "safe" race,
 // and it is the only clean way to break out of a channel.
 func (cm CMap) IterBuffered(sz int) KeyValueChan {
-	ch := KeyValueChan{lfchan.NewSize(sz)}
+	ch := KeyValueChan{newSizeKeyValueChan(sz)}
 	go func() {
 		var wg sync.WaitGroup
 		wg.Add(len(cm.shards))
@@ -248,7 +248,7 @@ func (cm CMap) MarshalJSON() ([]byte, error) {
 }
 
 type KeyValueChan struct {
-	v lfchan.Chan
+	v Chan
 }
 
 func (ch KeyValueChan) Recv() *KeyValue {
@@ -256,7 +256,7 @@ func (ch KeyValueChan) Recv() *KeyValue {
 	if !ok {
 		return nil
 	}
-	return v.(*KeyValue)
+	return v
 }
 
 func (ch KeyValueChan) Break() {
