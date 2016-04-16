@@ -10,8 +10,12 @@ import (
 	"sync/atomic"
 )
 
-// IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
-var IgnoreValue = &struct{ bool }{true}
+var (
+	// IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
+	IgnoreValue = &struct{ bool }{true}
+	// DeleteValue can be returns from Update to delete the value
+	DeleteValue = &struct{ bool }{true}
+)
 
 // DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
 const DefaultShardCount = 1 << 4 // 16
@@ -20,94 +24,7 @@ const DefaultShardCount = 1 << 4 // 16
 type ForEachFunc func(key string, val interface{}) (BreakEarly bool)
 
 type CompareAndSwapFunc func(a, b interface{}) bool
-
-type lockedMap struct {
-	m map[string]interface{}
-	l sync.RWMutex
-}
-
-func (ms *lockedMap) Set(key string, v interface{}) {
-	ms.l.Lock()
-	ms.m[key] = v
-	ms.l.Unlock()
-}
-
-func (ms *lockedMap) Swap(key string, v interface{}) interface{} {
-	ms.l.Lock()
-	ov := ms.m[key]
-	ms.m[key] = v
-	ms.l.Unlock()
-	return ov
-}
-
-func (ms *lockedMap) CompareAndSwap(key string, v interface{}, casFn CompareAndSwapFunc) bool {
-	ms.l.Lock()
-	ov := ms.m[key]
-	ok := casFn(v, ov)
-	if ok {
-		ms.m[key] = v
-	}
-	ms.l.Unlock()
-	return ok
-}
-
-func (ms *lockedMap) Get(key string) interface{} {
-	ms.l.RLock()
-	v := ms.m[key]
-	ms.l.RUnlock()
-	return v
-}
-
-func (ms *lockedMap) Has(key string) bool {
-	ms.l.RLock()
-	_, ok := ms.m[key]
-	ms.l.RUnlock()
-	return ok
-}
-
-func (ms *lockedMap) Delete(key string) {
-	ms.l.Lock()
-	delete(ms.m, key)
-	ms.l.Unlock()
-}
-
-func (ms *lockedMap) DeleteAndGet(key string) interface{} {
-	ms.l.Lock()
-	v := ms.m[key]
-	delete(ms.m, key)
-	ms.l.Unlock()
-	return v
-}
-
-func (ms *lockedMap) Len() int {
-	ms.l.RLock()
-	ln := len(ms.m)
-	ms.l.RUnlock()
-	return ln
-}
-
-func (ms *lockedMap) ForEach(fn ForEachFunc) {
-	ms.l.RLock()
-	for k, v := range ms.m {
-		if fn(k, v) {
-			break
-		}
-	}
-	ms.l.RUnlock()
-}
-
-func (ms *lockedMap) iter(ch KeyValueChan, wg *sync.WaitGroup) {
-	var kv KeyValue
-	ms.l.RLock()
-	for k, v := range ms.m {
-		kv.Key, kv.Value = k, v
-		if !ch.send(&kv) {
-			break
-		}
-	}
-	ms.l.RUnlock()
-	wg.Done()
-}
+type UpdateFunc func(oldVal interface{}) (newVal interface{})
 
 // CMap is a sharded thread-safe concurrent map.
 type CMap struct {
@@ -188,7 +105,13 @@ func (cm CMap) Has(key string) bool                 { return cm.shard(key).Has(k
 func (cm CMap) Delete(key string)                   { cm.shard(key).Delete(key) }
 func (cm CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).DeleteAndGet(key) }
 
-func (cm CMap) Swap(key string, val interface{}) interface{} { return cm.shard(key).Swap(key, val) }
+func (cm CMap) Update(key string, fn func(ov interface{}) interface{}) {
+	cm.shard(key).Update(key, fn)
+}
+func (cm CMap) Swap(key string, val interface{}) interface{} {
+	return cm.shard(key).Swap(key, val)
+}
+
 func (cm CMap) CompareAndSwap(key string, val interface{}, eqFn CompareAndSwapFunc) bool {
 	return cm.shard(key).CompareAndSwap(key, val, eqFn)
 }
@@ -228,12 +151,12 @@ type KeyValue struct {
 	Value interface{}
 }
 
-// Iter is an alias for IterBuffered(1)
-func (cm CMap) Iter() KeyValueChan { return cm.IterBuffered(1) }
+// Iter is an alias for IterBuffered(0)
+func (cm CMap) Iter() KeyValueChan { return cm.IterBuffered(0) }
 
-// IterBuffered returns a buffered channel sz, to return an unbuffered channel you can pass 1
-// calling breakLoop will close the channel and consume any remaining values in it.
-// note that calling breakLoop() will show as a race on the race detector but it's more or less a "safe" race,
+// IterBuffered returns a buffered channel sz, to return an unbuffered channel you can pass 0
+// ch.Break() on the returned channel can allow breaking early.
+// note that calling ch.Break() will show as a race on the race detector but it's more or less a "safe" race,
 // and it is the only clean way to break out of a channel.
 func (cm CMap) IterBuffered(sz int) KeyValueChan {
 	ch := make(KeyValueChan, sz)
