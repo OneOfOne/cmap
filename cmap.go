@@ -19,6 +19,8 @@ const DefaultShardCount = 1 << 4 // 16
 // ForeachFunc is a function that gets passed to Foreach, returns true to break early
 type ForEachFunc func(key string, val interface{}) (BreakEarly bool)
 
+type CompareAndSwapFunc func(a, b interface{}) bool
+
 type lockedMap struct {
 	m map[string]interface{}
 	l sync.RWMutex
@@ -28,6 +30,25 @@ func (ms *lockedMap) Set(key string, v interface{}) {
 	ms.l.Lock()
 	ms.m[key] = v
 	ms.l.Unlock()
+}
+
+func (ms *lockedMap) Swap(key string, v interface{}) interface{} {
+	ms.l.Lock()
+	ov := ms.m[key]
+	ms.m[key] = v
+	ms.l.Unlock()
+	return ov
+}
+
+func (ms *lockedMap) CompareAndSwap(key string, v interface{}, casFn CompareAndSwapFunc) bool {
+	ms.l.Lock()
+	ov := ms.m[key]
+	ok := casFn(v, ov)
+	if ok {
+		ms.m[key] = v
+	}
+	ms.l.Unlock()
+	return ok
 }
 
 func (ms *lockedMap) Get(key string) interface{} {
@@ -80,7 +101,7 @@ func (ms *lockedMap) iter(ch KeyValueChan, wg *sync.WaitGroup) {
 	ms.l.RLock()
 	for k, v := range ms.m {
 		kv.Key, kv.Value = k, v
-		if !ch.v.Send(&kv, true) {
+		if !ch.send(&kv) {
 			break
 		}
 	}
@@ -160,11 +181,17 @@ func (cm CMap) shard(key string) *lockedMap {
 	return &cm.shards[h&cm.l]
 }
 
-func (cm CMap) Set(key string, val interface{})     { cm.shard(key).Set(key, val) }
+func (cm CMap) Set(key string, val interface{}) { cm.shard(key).Set(key, val) }
+
 func (cm CMap) Get(key string) interface{}          { return cm.shard(key).Get(key) }
 func (cm CMap) Has(key string) bool                 { return cm.shard(key).Has(key) }
 func (cm CMap) Delete(key string)                   { cm.shard(key).Delete(key) }
 func (cm CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).DeleteAndGet(key) }
+
+func (cm CMap) Swap(key string, val interface{}) interface{} { return cm.shard(key).Swap(key, val) }
+func (cm CMap) CompareAndSwap(key string, val interface{}, eqFn CompareAndSwapFunc) bool {
+	return cm.shard(key).CompareAndSwap(key, val, eqFn)
+}
 
 func (cm CMap) Foreach(fn ForEachFunc) {
 	for i := range cm.shards {
@@ -209,7 +236,7 @@ func (cm CMap) Iter() KeyValueChan { return cm.IterBuffered(1) }
 // note that calling breakLoop() will show as a race on the race detector but it's more or less a "safe" race,
 // and it is the only clean way to break out of a channel.
 func (cm CMap) IterBuffered(sz int) KeyValueChan {
-	ch := KeyValueChan{newSizeKeyValueChan(sz)}
+	ch := make(KeyValueChan, sz)
 	go func() {
 		var wg sync.WaitGroup
 		wg.Add(len(cm.shards))
@@ -245,25 +272,4 @@ func (cm CMap) MarshalJSON() ([]byte, error) {
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
-}
-
-type KeyValueChan struct {
-	v Chan
-}
-
-func (ch KeyValueChan) Recv() *KeyValue {
-	v, ok := ch.v.Recv(true)
-	if !ok {
-		return nil
-	}
-	return v
-}
-
-func (ch KeyValueChan) Break() {
-	ch.v.Close()
-	for {
-		if _, ok := ch.v.Recv(true); !ok {
-			return
-		}
-	}
 }

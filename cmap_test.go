@@ -35,7 +35,7 @@ func TestIter(t *testing.T) {
 	}
 	ch := cm.IterBuffered(20)
 	cnt := 0
-	for v := ch.Recv(); v != nil; v = ch.Recv() {
+	for range ch {
 		cnt++
 		ch.Break()
 	}

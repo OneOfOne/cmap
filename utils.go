@@ -26,3 +26,22 @@ func FNV32aString(s string) uint32 {
 	}
 	return h
 }
+
+type KeyValueChan chan *KeyValue
+
+func (ch KeyValueChan) send(v *KeyValue) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	ch <- v
+	return true
+}
+
+func (ch KeyValueChan) Break() {
+	defer func() { recover() }()
+	close(ch)
+	for range ch {
+	}
+}
