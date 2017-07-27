@@ -113,6 +113,14 @@ func (cm *CMap) ForEachParallel(fn func(key, val interface{}) error) error {
 	return err
 }
 
+func (cm *CMap) Len() int {
+	ln := 0
+	for i := range cm.shards {
+		ln += cm.shards[i].Len()
+	}
+	return ln
+}
+
 func DefaultHasher(key interface{}) uint64 {
 	switch key := key.(type) {
 	case string:
