@@ -3,7 +3,6 @@ package cmap
 import (
 	"fmt"
 	"math"
-	"reflect"
 	"sync"
 	"sync/atomic"
 
@@ -13,15 +12,8 @@ import (
 // DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
 const DefaultShardCount = 1 << 4 // 16
 
-var (
-	hashers    = map[reflect.Type]func(key interface{}) uint64{}
-	hashersMux sync.RWMutex
-)
-
-func RegisterHasher(t reflect.Type, fn func(key interface{}) uint64) {
-	hashersMux.Lock()
-	hashers[t] = fn
-	hashersMux.Unlock()
+type Hasher interface {
+	Hash() uint64
 }
 
 type CMap struct {
@@ -42,13 +34,16 @@ func NewSize(shardCount int) *CMap {
 	} else if shardCount&(shardCount-1) != 0 {
 		panic("shardCount must be a power of 2")
 	}
+
 	cm := CMap{
 		shards: make([]smap, shardCount),
 		l:      uint64(shardCount) - 1,
 	}
+
 	for i := range cm.shards {
 		cm.shards[i].m = make(map[interface{}]interface{})
 	}
+
 	cm.HashFn = DefaultHasher
 	return &cm
 }
@@ -137,13 +132,9 @@ func DefaultHasher(key interface{}) uint64 {
 		return uint64(key)
 	case uint:
 		return uint64(key)
+	case Hasher:
+		return key.Hash()
 	default:
-		hashersMux.RLock()
-		fn, ok := hashers[reflect.TypeOf(key)]
-		hashersMux.RUnlock()
-		if ok {
-			return fn(key)
-		}
 		panic(fmt.Sprintf("unsupported type: %T (%v)", key, key))
 	}
 }
