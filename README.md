@@ -22,55 +22,61 @@ func main() {
 	if v, ok := cm.Get("key").(string); ok {
 		// do something with v
 	}
-	it := cmap.Iter()
-	for v := it.Recv(); v != nil; v = it.Recv() {
-		if kv.Key == "key" {
-			it.Break()
-		}
-	}
 }
 ```
 
 ## Benchmark
 ```bash
-➜ go test -bench='256|Mutex' -benchmem -tags streamrail -benchtime 2s -cpu 1,8,32
-# https://github.com/streamrail/concurrent-map
-BenchmarkSRCMap256Shards       	 2000000	      1210 ns/op	     184 B/op	       2 allocs/op
-BenchmarkSRCMap256Shards-8     	10000000	       365 ns/op	     154 B/op	       2 allocs/op
-BenchmarkSRCMap256Shards-32    	10000000	       287 ns/op	     154 B/op	       2 allocs/op
+➤ go test -bench=. -benchmem -tags streamrail -benchtime 2s -cpu 1,8,32 -short
+# map[interface{}]interface{}
+BenchmarkCMap/2048                      20000000               172 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/4096                      20000000               166 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/8192                      20000000               165 ns/op             0 B/op          0 allocs/op
 
-BenchmarkCMap256Shards         	 3000000	       743 ns/op	     135 B/op	       2 allocs/op
-BenchmarkCMap256Shards-8       	10000000	       307 ns/op	     153 B/op	       2 allocs/op
-BenchmarkCMap256Shards-32      	10000000	       235 ns/op	     153 B/op	       2 allocs/op
+BenchmarkCMap/4096-8                    50000000              42.8 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/2048-8                    50000000              46.0 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/8192-8                    100000000             41.8 ns/op             0 B/op          0 allocs/op
 
-BenchmarkMutexMap              	 2000000	      1275 ns/op	     183 B/op	       2 allocs/op
-BenchmarkMutexMap-8            	 3000000	       739 ns/op	     135 B/op	       2 allocs/op
-BenchmarkMutexMap-32           	 3000000	       716 ns/op	     135 B/op	       2 allocs/op
+BenchmarkCMap/2048-32                   100000000             43.2 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/4096-32                   100000000             41.3 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/8192-32                   100000000             39.1 ns/op             0 B/op          0 allocs/op
+
+# map[string]interface{}
+BenchmarkCMapString/2048                20000000               185 ns/op            16 B/op          1 allocs/op
+BenchmarkCMapString/4096                20000000               178 ns/op            16 B/op          1 allocs/op
+BenchmarkCMapString/8192                20000000               171 ns/op            16 B/op          1 allocs/op
+
+BenchmarkCMapString/2048-8              50000000              47.6 ns/op            16 B/op          1 allocs/op
+BenchmarkCMapString/4096-8              100000000             44.7 ns/op            16 B/op          1 allocs/op
+BenchmarkCMapString/8192-8              100000000             42.9 ns/op            16 B/op          1 allocs/op
+
+BenchmarkCMapString/2048-32             50000000              51.1 ns/op            16 B/op          1 allocs/op
+BenchmarkCMapString/4096-32             50000000              48.7 ns/op            16 B/op          1 allocs/op
+BenchmarkCMapString/8192-32             100000000             46.0 ns/op            16 B/op          1 allocs/op
+
+# map[interface{}]interface{} protected with sync.RWMutex
+BenchmarkMutexMap                       20000000               136 ns/op             0 B/op          0 allocs/op
+BenchmarkMutexMap-8                     20000000               177 ns/op             0 B/op          0 allocs/op
+BenchmarkMutexMap-32                    20000000               178 ns/o              0 B/op          0 allocs/op
+
+# sync.Map
+BenchmarkSyncMap                        20000000               157 ns/op            16 B/op          1 allocs/op
+BenchmarkSyncMap-8                      100000000             38.2 ns/op            16 B/op          1 allocs/op
+BenchmarkSyncMap-32                     100000000             41.0 ns/op            16 B/op          1 allocs/op
+
+BenchmarkStreamrail/2048                20000000               201 ns/op            16 B/op          1 allocs/op
+BenchmarkStreamrail/4096                20000000               196 ns/op            16 B/op          1 allocs/op
+BenchmarkStreamrail/8192                20000000               188 ns/op            16 B/op          1 allocs/op
+
+BenchmarkStreamrail/2048-8              50000000              50.0 ns/op            16 B/op          1 allocs/op
+BenchmarkStreamrail/4096-8              50000000              49.3 ns/op            16 B/op          1 allocs/op
+BenchmarkStreamrail/8192-8              50000000              45.7 ns/op            16 B/op          1 allocs/op
+
+BenchmarkStreamrail/2048-32             50000000              53.2 ns/op            16 B/op          1 allocs/op
+BenchmarkStreamrail/4096-32             50000000              53.4 ns/op            16 B/op          1 allocs/op
+BenchmarkStreamrail/8192-32             50000000              47.9 ns/op            16 B/op          1 allocs/op
 PASS
-ok  	github.com/OneOfOne/cmap	30.817s
-
-➜ go test -bench=. -benchmem -tags streamrail -benchtime 5s
-testing: warning: no tests to run
-# https://github.com/streamrail/concurrent-map
-BenchmarkSRCMap8Shards-8        10000000               772 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap16Shards-8       10000000               710 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap32Shards-8       20000000               632 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap64Shards-8       20000000               495 ns/op             153 B/op          2 allocs/op
-BenchmarkSRCMap128Shards-8      20000000               420 ns/op             154 B/op          2 allocs/op
-BenchmarkSRCMap256Shards-8      20000000               388 ns/op             154 B/op          2 allocs/op
-
-# this package
-BenchmarkCMap8Shards-8          10000000               591 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap16Shards-8         20000000               492 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap32Shards-8         20000000               446 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap64Shards-8         20000000               362 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap128Shards-8        20000000               368 ns/op             153 B/op          2 allocs/op
-BenchmarkCMap256Shards-8        20000000               320 ns/op             153 B/op          2 allocs/op
-
-# simple RWMutex-guarded map
-BenchmarkMutexMap-8             10000000               901 ns/op             153 B/op          2 allocs/op
-PASS
-ok      github.com/OneOfOne/cmap        88.383s
+ok      github.com/OneOfOne/cmap        118.483s
 ```
 
 ## License
