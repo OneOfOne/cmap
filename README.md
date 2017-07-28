@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	cm := cmap.New() // or
+	cm := cmap.New() // or cmap.NewString()
 	// cm := cmap.NewSize(1 << 8) // the size must always be a power of 2
 	cm.Set("key", "value")
 	ok := cm.Has("key") == true

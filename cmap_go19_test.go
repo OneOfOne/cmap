@@ -1,6 +1,6 @@
 // +build go1.9
 
-package cmap
+package cmap_test
 
 import (
 	"sync"

@@ -1,178 +1,115 @@
-//go:generate go run "$GOPATH/src/github.com/OneOfOne/lfchan/gen.go" "*KeyValue" .
-
 package cmap
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
+	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 )
 
-var (
-	// IgnoreValue can be returned from the func called to NewFromJSON to ignore setting the value
-	IgnoreValue = &struct{ bool }{true}
-	// DeleteValue can be returns from Update to delete the value
-	DeleteValue = &struct{ bool }{true}
-)
-
 // DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
-const DefaultShardCount = 1 << 4 // 16
+const DefaultShardCount = 1 << 9 // 512
 
-// ForeachFunc is a function that gets passed to Foreach, returns true to break early
-type ForEachFunc func(key string, val interface{}) (BreakEarly bool)
+// KeyHasher represents an interface to supply your own type of hashing for keys.
+type KeyHasher interface {
+	Hash() uint32
+}
 
-type CompareAndSwapFunc func(a, b interface{}) bool
-type UpdateFunc func(oldVal interface{}) (newVal interface{})
-
-// CMap is a sharded thread-safe concurrent map.
+// CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
-	shards []lockedMap
-	l      uint64
+	shards []lmap
+	HashFn func(interface{}) uint32
+	mod    uint32
 }
 
 // New is an alias for NewSize(DefaultShardCount)
-func New() CMap { return NewSize(DefaultShardCount) }
+func New() *CMap { return NewSize(DefaultShardCount) }
 
 // NewSize returns a CMap with the specific shardSize, note that for performance reasons,
 // shardCount must be a power of 2
-func NewSize(shardCount int) CMap {
+func NewSize(shardCount int) *CMap {
 	// must be a power of 2
-	if shardCount == 0 {
+	if shardCount < 1 {
 		shardCount = DefaultShardCount
 	} else if shardCount&(shardCount-1) != 0 {
 		panic("shardCount must be a power of 2")
 	}
-	cm := CMap{
-		shards: make([]lockedMap, shardCount),
-		l:      uint64(shardCount) - 1,
+
+	cm := &CMap{
+		shards: make([]lmap, shardCount),
+		mod:    uint32(shardCount) - 1,
+		HashFn: DefaultKeyHasher,
 	}
+
 	for i := range cm.shards {
-		cm.shards[i].m = make(map[string]interface{}, shardCount/2)
+		cm.shards[i].m = make(map[interface{}]interface{})
 	}
+
 	return cm
 }
 
-// NewFromJSON is an alias for NewSizeFromJSON(DefaultShardCount, r, fn)
-func NewFromJSON(r io.Reader, fn func(v interface{}) interface{}) (CMap, error) {
-	return NewSizeFromJSON(DefaultShardCount, r, fn)
+func (cm *CMap) shard(key interface{}) *lmap {
+	h := cm.HashFn(key)
+	return &cm.shards[h&cm.mod]
 }
 
-// NewFromJSON returns a cmap constructed from json, fn will return the "proper" value, for example:
-// json by default reads all numbers as float64, so fn(v) where v is supposed to be an int should look like:
-// 	func(v interface{}) interface{} { n, _ := v.(json.Number).Int64(); return int(n) }
-// note that by default all numbers will be json.Number
-func NewSizeFromJSON(shardCount int, r io.Reader, fn func(v interface{}) interface{}) (CMap, error) {
-	//TODO use json.RawMessage
-	cm := NewSize(shardCount)
-	dec := json.NewDecoder(r)
-	dec.UseNumber()
-	var key string
-	for dec.More() {
-		t, err := dec.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return cm, err
-		}
-		if t, ok := t.(string); ok && key == "" {
-			key = t
-			continue
-		}
-
-		if key != "" {
-			if v := fn(t); v != IgnoreValue {
-				cm.shard(key).m[key] = v // no need to use locks for this
-			}
-			key = ""
-		}
-	}
-
-	return cm, nil
+func (cm *CMap) Get(key interface{}) (val interface{}) {
+	return cm.shard(key).Get(key)
 }
 
-func (cm CMap) shard(key string) *lockedMap {
-	h := FNV64aString(key)
-	return &cm.shards[h&cm.l]
+func (cm *CMap) Set(key, val interface{}) {
+	cm.shard(key).Set(key, val)
 }
 
-func (cm CMap) Set(key string, val interface{}) { cm.shard(key).Set(key, val) }
+func (cm *CMap) Has(key string) bool                 { return cm.shard(key).Has(key) }
+func (cm *CMap) Delete(key string)                   { cm.shard(key).Delete(key) }
+func (cm *CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).DeleteAndGet(key) }
 
-func (cm CMap) Get(key string) interface{}          { return cm.shard(key).Get(key) }
-func (cm CMap) Has(key string) bool                 { return cm.shard(key).Has(key) }
-func (cm CMap) Delete(key string)                   { cm.shard(key).Delete(key) }
-func (cm CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).DeleteAndGet(key) }
-
-func (cm CMap) Update(key string, fn func(ov interface{}) interface{}) {
+func (cm *CMap) Update(key string, fn func(oldVal interface{}) (newVal interface{})) {
 	cm.shard(key).Update(key, fn)
 }
-func (cm CMap) Swap(key string, val interface{}) interface{} {
+func (cm *CMap) Swap(key string, val interface{}) interface{} {
 	return cm.shard(key).Swap(key, val)
 }
 
-func (cm CMap) CompareAndSwap(key string, val interface{}, eqFn CompareAndSwapFunc) bool {
-	return cm.shard(key).CompareAndSwap(key, val, eqFn)
-}
-
-func (cm CMap) Foreach(fn ForEachFunc) {
+func (cm *CMap) Foreach(fn func(key, val interface{}) error) error {
 	for i := range cm.shards {
-		cm.shards[i].ForEach(fn)
+		if err := cm.shards[i].ForEach(fn); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (cm CMap) ForEachParallel(fn ForEachFunc) {
+func (cm *CMap) ForEachParallel(fn func(key, val interface{}) error) error {
 	var (
 		wg   sync.WaitGroup
-		exit uint32
+		errv atomic.Value
 	)
-	wg.Add(len(cm.shards))
 	for i := range cm.shards {
+		wg.Add(1)
 		go func(i int) {
-			cm.shards[i].ForEach(func(k string, v interface{}) bool {
-				if atomic.LoadUint32(&exit) == 1 {
-					return true
+			cm.shards[i].ForEach(func(k, v interface{}) error {
+				if err, _ := errv.Load().(error); err != nil {
+					return err
 				}
-				b := fn(k, v)
-				if b {
-					atomic.StoreUint32(&exit, 1)
+
+				if err := fn(k, v); err != nil {
+					errv.Store(err)
+					return err
 				}
-				return b
+				return nil
 			})
 			wg.Done()
 		}(i)
 	}
 	wg.Wait()
+
+	err, _ := errv.Load().(error)
+	return err
 }
 
-type KeyValue struct {
-	Key   string
-	Value interface{}
-}
-
-// Iter is an alias for IterBuffered(0)
-func (cm CMap) Iter() KeyValueChan { return cm.IterBuffered(0) }
-
-// IterBuffered returns a buffered channel sz, to return an unbuffered channel you can pass 0
-// ch.Break() on the returned channel can allow breaking early.
-// note that calling ch.Break() will show as a race on the race detector but it's more or less a "safe" race,
-// and it is the only clean way to break out of a channel.
-func (cm CMap) IterBuffered(sz int) KeyValueChan {
-	ch := make(KeyValueChan, sz)
-	go func() {
-		var wg sync.WaitGroup
-		wg.Add(len(cm.shards))
-		for i := range cm.shards {
-			go cm.shards[i].iter(ch, &wg)
-		}
-		wg.Wait()
-		ch.Break()
-	}()
-	return ch
-}
-
-func (cm CMap) Len() int {
+func (cm *CMap) Len() int {
 	ln := 0
 	for i := range cm.shards {
 		ln += cm.shards[i].Len()
@@ -180,19 +117,28 @@ func (cm CMap) Len() int {
 	return ln
 }
 
-func (cm CMap) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	buf.WriteByte('{')
-	enc := json.NewEncoder(&buf)
-	cm.Foreach(func(k string, v interface{}) bool {
-		buf.WriteString(`"` + k + `":`)
-		enc.Encode(v)
-		buf.Bytes()[buf.Len()-1] = ','
-		return false
-	})
-	if buf.Bytes()[buf.Len()-1] == ',' {
-		buf.Truncate(buf.Len() - 1)
+// DefaultKeyHasher returns a hash for the specific key for internal sharding.
+// By default, those types are supported as keys: string, uint64, int64, uint32, int32, uint, int,
+//  float64, float32 and KeyHasher.
+func DefaultKeyHasher(key interface{}) uint32 {
+	switch key := key.(type) {
+	case string:
+		return fnv32(key)
+	case uint64:
+		return uint32(key)
+	case int64:
+		return uint32(key)
+	case float64:
+		return uint32(math.Float64bits(key))
+	case float32:
+		return uint32(math.Float32bits(key))
+	case int:
+		return uint32(key)
+	case uint:
+		return uint32(key)
+	case KeyHasher:
+		return key.Hash()
+	default:
+		panic(fmt.Sprintf("unsupported type: %T (%v)", key, key))
 	}
-	buf.WriteByte('}')
-	return buf.Bytes(), nil
 }
