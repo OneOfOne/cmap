@@ -6,26 +6,38 @@ import (
 )
 
 // DefaultKeyHasher returns a hash for the specific key for internal sharding.
-// By default, those types are supported as keys: string, uint64, int64, uint32, int32, uint, int,
+// By default, those types are supported as keys: string, uint64, int64, uint32, int32, uint16, int16, uint8, int8, uint, int,
 //  float64, float32 and KeyHasher.
 func DefaultKeyHasher(key interface{}) uint32 {
 	switch key := key.(type) {
+	case KeyHasher:
+		return rehash32(key.Hash())
 	case string:
 		return fnv32(key)
+	case int:
+		return rehash32(uint32(key))
+	case uint:
+		return rehash32(uint32(key))
 	case uint64:
 		return rehash32(uint32(key))
 	case int64:
+		return rehash32(uint32(key))
+	case uint32:
+		return rehash32(uint32(key))
+	case int32:
+		return rehash32(uint32(key))
+	case uint16:
+		return rehash32(uint32(key))
+	case int16:
+		return rehash32(uint32(key))
+	case uint8:
+		return rehash32(uint32(key))
+	case int8:
 		return rehash32(uint32(key))
 	case float64:
 		return rehash32(uint32(math.Float64bits(key)))
 	case float32:
 		return rehash32(uint32(math.Float32bits(key)))
-	case int:
-		return rehash32(uint32(key))
-	case uint:
-		return rehash32(uint32(key))
-	case KeyHasher:
-		return rehash32(key.Hash())
 	default:
 		panic(fmt.Sprintf("unsupported type: %T (%v)", key, key))
 	}

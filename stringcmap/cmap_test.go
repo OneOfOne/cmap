@@ -16,7 +16,7 @@ func init() {
 	}
 }
 
-func benchCmapStringSetGet(b *testing.B, sz int) {
+func benchStringCMapSetGet(b *testing.B, sz int) {
 	cm := stringcmap.NewSize(sz)
 	keys := make([]string, 10000)
 	for i := range keys {
@@ -34,17 +34,16 @@ func benchCmapStringSetGet(b *testing.B, sz int) {
 			i++
 		}
 	})
-
 }
 
-func BenchmarkCMapString(b *testing.B) {
-	shardCounts := []int{2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192}
+func BenchmarkStringCMap(b *testing.B) {
+	shardCounts := []int{32, 64, 128, 256, 512, 1024, 2048, 4096, 8192}
 	if testing.Short() {
 		shardCounts = shardCounts[len(shardCounts)-3:]
 	}
 	for _, sz := range shardCounts {
 		b.Run(strconv.Itoa(sz), func(b *testing.B) {
-			benchCmapStringSetGet(b, sz)
+			benchStringCMapSetGet(b, sz)
 		})
 	}
 }

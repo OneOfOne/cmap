@@ -26,7 +26,7 @@ func benchSR(b *testing.B, sz int) {
 }
 
 func BenchmarkStreamrail(b *testing.B) {
-	shardCounts := []int{2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192}
+	shardCounts := []int{32, 64, 128, 256, 512, 1024, 2048, 4096, 8192}
 	if testing.Short() {
 		shardCounts = shardCounts[len(shardCounts)-3:]
 	}

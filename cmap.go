@@ -6,7 +6,7 @@ import (
 )
 
 // DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
-const DefaultShardCount = 1 << 6 // 64
+const DefaultShardCount = 1 << 8 // 256
 
 // KeyHasher represents an interface to supply your own type of hashing for keys.
 type KeyHasher interface {
@@ -67,11 +67,25 @@ func (cm *CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).Dele
 func (cm *CMap) Update(key string, fn func(oldVal interface{}) (newVal interface{})) {
 	cm.shard(key).Update(key, fn)
 }
+
 func (cm *CMap) Swap(key string, val interface{}) interface{} {
 	return cm.shard(key).Swap(key, val)
 }
 
-func (cm *CMap) Foreach(fn func(key, val interface{}) error) error {
+func (cm *CMap) Keys() []interface{} {
+	out := make([]interface{}, 0, cm.Len())
+	for i := range cm.shards {
+		sh := &cm.shards[i]
+		sh.l.RLock()
+		for k := range sh.m {
+			out = append(out, k)
+		}
+		sh.l.RUnlock()
+	}
+	return out
+}
+
+func (cm *CMap) ForEach(fn func(key, val interface{}) error) error {
 	for i := range cm.shards {
 		if err := cm.shards[i].ForEach(fn); err != nil {
 			return err

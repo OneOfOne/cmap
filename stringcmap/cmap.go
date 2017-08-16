@@ -61,11 +61,25 @@ func (cm *CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).Dele
 func (cm *CMap) Update(key string, fn func(oldVal interface{}) (newVal interface{})) {
 	cm.shard(key).Update(key, fn)
 }
+
 func (cm *CMap) Swap(key string, val interface{}) interface{} {
 	return cm.shard(key).Swap(key, val)
 }
 
-func (cm *CMap) Foreach(fn func(key string, val interface{}) error) error {
+func (cm *CMap) Keys() []string {
+	out := make([]string, 0, cm.Len())
+	for i := range cm.shards {
+		sh := &cm.shards[i]
+		sh.l.RLock()
+		for k := range sh.m {
+			out = append(out, k)
+		}
+		sh.l.RUnlock()
+	}
+	return out
+}
+
+func (cm *CMap) ForEach(fn func(key string, val interface{}) error) error {
 	for i := range cm.shards {
 		if err := cm.shards[i].ForEach(fn); err != nil {
 			return err
@@ -88,7 +102,9 @@ func (cm *CMap) ForEachParallel(fn func(key string, val interface{}) error) erro
 				}
 
 				if err := fn(k, v); err != nil {
-					errv.Store(err)
+					if errv.Load() == nil {
+						errv.Store(err)
+					}
 					return err
 				}
 				return nil
