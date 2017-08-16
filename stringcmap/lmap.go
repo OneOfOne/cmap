@@ -1,25 +1,25 @@
-package cmap
+package stringcmap
 
 import "sync"
 
-type lmapString struct {
+type lmap struct {
 	m map[string]interface{}
 	l sync.RWMutex
 }
 
-func (ms *lmapString) Set(key string, v interface{}) {
+func (ms *lmap) Set(key string, v interface{}) {
 	ms.l.Lock()
 	ms.m[key] = v
 	ms.l.Unlock()
 }
 
-func (ms *lmapString) Update(key string, fn func(oldVal interface{}) (newVal interface{})) {
+func (ms *lmap) Update(key string, fn func(oldVal interface{}) (newVal interface{})) {
 	ms.l.Lock()
 	ms.m[key] = fn(ms.m[key])
 	ms.l.Unlock()
 }
 
-func (ms *lmapString) Swap(key string, newV interface{}) (oldV interface{}) {
+func (ms *lmap) Swap(key string, newV interface{}) (oldV interface{}) {
 	ms.l.Lock()
 	oldV = ms.m[key]
 	ms.m[key] = newV
@@ -27,33 +27,33 @@ func (ms *lmapString) Swap(key string, newV interface{}) (oldV interface{}) {
 	return
 }
 
-func (ms *lmapString) Get(key string) (v interface{}) {
+func (ms *lmap) Get(key string) (v interface{}) {
 	ms.l.RLock()
 	v = ms.m[key]
 	ms.l.RUnlock()
 	return
 }
-func (ms *lmapString) GetOK(key string) (v interface{}, ok bool) {
+func (ms *lmap) GetOK(key string) (v interface{}, ok bool) {
 	ms.l.RLock()
 	v, ok = ms.m[key]
 	ms.l.RUnlock()
 	return
 }
 
-func (ms *lmapString) Has(key string) (ok bool) {
+func (ms *lmap) Has(key string) (ok bool) {
 	ms.l.RLock()
 	_, ok = ms.m[key]
 	ms.l.RUnlock()
 	return
 }
 
-func (ms *lmapString) Delete(key string) {
+func (ms *lmap) Delete(key string) {
 	ms.l.Lock()
 	delete(ms.m, key)
 	ms.l.Unlock()
 }
 
-func (ms *lmapString) DeleteAndGet(key string) (v interface{}) {
+func (ms *lmap) DeleteAndGet(key string) (v interface{}) {
 	ms.l.Lock()
 	v = ms.m[key]
 	delete(ms.m, key)
@@ -61,30 +61,31 @@ func (ms *lmapString) DeleteAndGet(key string) (v interface{}) {
 	return v
 }
 
-func (ms *lmapString) Len() (ln int) {
+func (ms *lmap) Len() (ln int) {
 	ms.l.RLock()
 	ln = len(ms.m)
 	ms.l.RUnlock()
 	return
 }
 
-func (ms *lmapString) ForEach(fn func(key string, val interface{}) error) (err error) {
+func (ms *lmap) Keys() []string {
 	ms.l.RLock()
 	keys := make([]string, 0, len(ms.m))
 	for key := range ms.m {
 		keys = append(keys, key)
 	}
 	ms.l.RUnlock()
+	return keys
+}
 
-	for _, key := range keys {
+func (ms *lmap) ForEach(fn func(key string, val interface{}) error) (err error) {
+	for _, key := range ms.Keys() {
 		ms.l.RLock()
 		val, ok := ms.m[key]
 		ms.l.RUnlock()
-
 		if !ok {
 			continue
 		}
-
 		if err = fn(key, val); err != nil {
 			return
 		}

@@ -1,9 +1,8 @@
 // +build streamrail
 
-package cmap_test
+package stringcmap_test
 
 import (
-	"fmt"
 	"strconv"
 	"testing"
 
@@ -11,10 +10,6 @@ import (
 )
 
 func benchSR(b *testing.B, sz int) {
-	keys := make([]string, 10000)
-	for i := range keys {
-		keys[i] = fmt.Sprintf("%010d", i)
-	}
 	CC.SHARD_COUNT = sz
 	cm := CC.New()
 	b.RunParallel(func(pb *testing.PB) {

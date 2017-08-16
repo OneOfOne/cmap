@@ -9,10 +9,6 @@ import (
 
 func BenchmarkSyncMap(b *testing.B) {
 	var cm sync.Map
-	keys := make([]interface{}, 10000)
-	for i := range keys {
-		keys[i] = uint64(i)
-	}
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		var i int
@@ -20,7 +16,7 @@ func BenchmarkSyncMap(b *testing.B) {
 			x := keys[i%len(keys)]
 			cm.Store(x, x)
 
-			if v, ok := cm.Load(x); !ok || v.(uint64) != x {
+			if v, ok := cm.Load(x); !ok || v.(string) != x {
 				b.Fatalf("wanted %v, got %v", x, v)
 			}
 			i++
