@@ -1,5 +1,7 @@
 package cmap
 
+import "context"
+
 type (
 
 	// KT is the KeyType of the map, used for generating specialized versions.
@@ -129,7 +131,7 @@ func (cm *CMap) Keys() []KT {
 
 // ForEach loops over all the key/values in all the shards in order.
 // You can break early by returning an error.
-// It is safe to change the map during this call.
+// It **is** safe to modify the map while using this iterator, however it uses more memory and is slightly slower.
 func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
 	for i := range cm.shards {
 		if err := cm.shards[i].ForEach(fn); err != nil {
@@ -144,10 +146,10 @@ func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
 
 // ForEachLocked loops over all the key/values in the map.
 // You can break early by returning an error.
-// It is **NOT** safe to change the map during this call.
+// It is **NOT* safe to modify the map while using this iterator.
 func (cm *CMap) ForEachLocked(fn func(key KT, val VT) error) error {
 	for i := range cm.shards {
-		if err := cm.shards[i].ForEach(fn); err != nil {
+		if err := cm.shards[i].ForEachLocked(fn); err != nil {
 			if err == Break {
 				return nil
 			}
@@ -158,49 +160,45 @@ func (cm *CMap) ForEachLocked(fn func(key KT, val VT) error) error {
 }
 
 // Iter returns a channel to be used in for range.
-// **Warning** that breaking early will leak up to cm.NumShards() goroutines, use IterWithCancel if you intend to break early.
-// It is safe to modify the map while using the iterator.
-func (cm *CMap) Iter(buffer int) <-chan *KV {
-	ch, _ := cm.IterWithCancel(buffer)
+// Use `context.WithCancel` if you intend to break early or goroutines will leak.
+// It **is** safe to modify the map while using this iterator, however it uses more memory and is slightly slower.
+func (cm *CMap) Iter(ctx context.Context, buffer int) <-chan *KV {
+	ch := make(chan *KV, buffer)
+	go func() {
+		cm.iterContext(ctx, ch, false)
+		close(ch)
+	}()
 	return ch
 }
 
-// IterWithCancel returns a channel to be used in for range and
-// a cancelFn that can be called at any time to cleanly exit early.
-// Note that cancelFn will block until all the writers are notified.
-// It is safe to modify the map while using the iterator.
-func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) {
-	var (
-		ch       = make(chan *KV, buffer)
-		cancelCh = make(chan struct{})
-	)
+// IterLocked returns a channel to be used in for range.
+// Use `context.WithCancel` if you intend to break early or goroutines will leak and map access will deadlock.
+// It is **NOT* safe to modify the map while using this iterator.
+func (cm *CMap) IterLocked(ctx context.Context, buffer int) <-chan *KV {
+	ch := make(chan *KV, buffer)
+	go func() {
+		cm.iterContext(ctx, ch, false)
+		close(ch)
+	}()
+	return ch
+}
 
-	kvChan, cancelFn = ch, func() {
+func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
+	fn := func(k KT, v VT) error {
 		select {
-		case <-cancelCh:
-		default:
-			close(cancelCh)
-			for range ch {
-			}
+		case <-ctx.Done():
+			return Break
+		case ch <- &KV{k, v}:
+			return nil
 		}
 	}
-
-	go func() {
-		for i := range cm.shards {
-			cm.shards[i].ForEach(func(k KT, v VT) error {
-				select {
-				case <-cancelCh:
-					return Break
-				case ch <- &KV{k, v}:
-					return nil
-				}
-			})
+	for i := range cm.shards {
+		if locked {
+			cm.shards[i].ForEachLocked(fn)
+		} else {
+			cm.shards[i].ForEach(fn)
 		}
-		close(ch)
-		cancelFn()
-	}()
-
-	return
+	}
 }
 
 // Len returns the number of elements in the map.

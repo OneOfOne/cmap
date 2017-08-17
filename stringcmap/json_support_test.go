@@ -1,6 +1,7 @@
 package stringcmap
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"sort"
@@ -56,7 +57,7 @@ func TestJSONType(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for kv := range cm.Iter(0) {
+	for kv := range cm.Iter(context.Background(), 0) {
 		if v, ok := kv.Value.(uint64); !ok || kv.Key != "1" || v != 1 {
 			t.Fatalf("bad kv: %#+v", kv)
 		}

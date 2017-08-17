@@ -1,6 +1,8 @@
 package stringcmap
 
 import (
+	"context"
+
 	"github.com/OneOfOne/cmap"
 )
 
@@ -145,49 +147,28 @@ type KV struct {
 }
 
 // Iter returns a channel to be used in for range.
-// **Warning** that breaking early will leak up to cm.NumShards() goroutines, use IterWithCancel if you intend to break early.
-// It is safe to modify the map while using the iterator.
-func (cm *CMap) Iter(buffer int) <-chan *KV {
-	ch, _ := cm.IterWithCancel(buffer)
+// **Warning** breaking early will leak up to cm.NumShards() goroutines, use IterWithCancel if you intend to break early.
+// It is safe to modify the map while using this iterator.
+func (cm *CMap) Iter(ctx context.Context, buffer int) <-chan *KV {
+	ch := make(chan *KV, buffer)
+	go func() {
+		cm.iterContext(ctx, ch)
+		close(ch)
+	}()
 	return ch
 }
 
-// IterWithCancel returns a channel to be used in for range and
-// a cancelFn that can be called at any time to cleanly exit early.
-// Note that cancelFn will block until all the writers are notified.
-// It is safe to modify the map while using the iterator.
-func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) {
-	var (
-		ch       = make(chan *KV, buffer)
-		cancelCh = make(chan struct{})
-	)
-
-	kvChan, cancelFn = ch, func() {
-		select {
-		case <-cancelCh:
-		default:
-			close(cancelCh)
-			for range ch {
+func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV) {
+	for i := range cm.shards {
+		cm.shards[i].ForEach(func(k string, v interface{}) error {
+			select {
+			case <-ctx.Done():
+				return cmap.Break
+			case ch <- &KV{k, v}:
+				return nil
 			}
-		}
+		})
 	}
-
-	go func() {
-		for i := range cm.shards {
-			cm.shards[i].ForEach(func(k string, v interface{}) error {
-				select {
-				case <-cancelCh:
-					return cmap.Break
-				case ch <- &KV{k, v}:
-					return nil
-				}
-			})
-		}
-		close(ch)
-		cancelFn()
-	}()
-
-	return
 }
 
 // Len returns the number of elements in the map.

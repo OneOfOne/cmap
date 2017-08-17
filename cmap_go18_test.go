@@ -1,6 +1,7 @@
 package cmap_test
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -22,9 +23,10 @@ func TestIter(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		cm.Set(i, i)
 	}
-	ch, cancel := cm.IterWithCancel(0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	i := 0
-	for kv := range ch {
+	for kv := range cm.IterLocked(ctx, 1) {
 		t.Logf("%d: %+v", i, kv)
 		if i++; i > 10 {
 			cancel()
