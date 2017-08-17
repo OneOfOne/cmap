@@ -90,3 +90,16 @@ func (ms *lmap) ForEach(fn func(key string, val interface{}) error) (err error) 
 
 	return
 }
+
+func (ms *lmap) ForEachLocked(fn func(key string, val interface{}) error) (err error) {
+	ms.l.RLock()
+	defer ms.l.RUnlock()
+
+	for key, val := range ms.m {
+		if err = fn(key, val); err != nil {
+			return
+		}
+	}
+
+	return
+}

@@ -1,8 +1,6 @@
 package stringcmap
 
 import (
-	"sync"
-
 	"github.com/OneOfOne/cmap"
 )
 
@@ -125,6 +123,21 @@ func (cm *CMap) ForEach(fn func(key string, val interface{}) error) error {
 	return nil
 }
 
+// ForEachLocked loops over all the key/values in the map.
+// You can break early by returning an error.
+// It is **NOT** safe to change the map during this call.
+func (cm *CMap) ForEachLocked(fn func(key string, val interface{}) error) error {
+	for i := range cm.shards {
+		if err := cm.shards[i].ForEach(fn); err != nil {
+			if err == cmap.Break {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 // KV is returned from the Iter channel.
 type KV struct {
 	Key   string
@@ -145,7 +158,6 @@ func (cm *CMap) Iter(buffer int) <-chan *KV {
 // It is safe to modify the map while using the iterator.
 func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) {
 	var (
-		wg       sync.WaitGroup
 		ch       = make(chan *KV, buffer)
 		cancelCh = make(chan struct{})
 	)
@@ -160,23 +172,17 @@ func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) 
 		}
 	}
 
-	wg.Add(len(cm.shards))
-
 	go func() {
 		for i := range cm.shards {
-			go func(i int) {
-				cm.shards[i].ForEach(func(k string, v interface{}) error {
-					select {
-					case <-cancelCh:
-						return cmap.Break
-					case ch <- &KV{k, v}:
-						return nil
-					}
-				})
-				wg.Done()
-			}(i)
+			cm.shards[i].ForEach(func(k string, v interface{}) error {
+				select {
+				case <-cancelCh:
+					return cmap.Break
+				case ch <- &KV{k, v}:
+					return nil
+				}
+			})
 		}
-		wg.Wait()
 		close(ch)
 		cancelFn()
 	}()

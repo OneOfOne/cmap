@@ -1,9 +1,5 @@
 package cmap
 
-import (
-	"sync"
-)
-
 type (
 
 	// KT is the KeyType of the map, used for generating specialized versions.
@@ -133,8 +129,23 @@ func (cm *CMap) Keys() []KT {
 
 // ForEach loops over all the key/values in all the shards in order.
 // You can break early by returning an error.
-// it is safe to change the map inside fn.
+// It is safe to change the map during this call.
 func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
+	for i := range cm.shards {
+		if err := cm.shards[i].ForEach(fn); err != nil {
+			if err == Break {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachLocked loops over all the key/values in the map.
+// You can break early by returning an error.
+// It is **NOT** safe to change the map during this call.
+func (cm *CMap) ForEachLocked(fn func(key KT, val VT) error) error {
 	for i := range cm.shards {
 		if err := cm.shards[i].ForEach(fn); err != nil {
 			if err == Break {
@@ -160,7 +171,6 @@ func (cm *CMap) Iter(buffer int) <-chan *KV {
 // It is safe to modify the map while using the iterator.
 func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) {
 	var (
-		wg       sync.WaitGroup
 		ch       = make(chan *KV, buffer)
 		cancelCh = make(chan struct{})
 	)
@@ -175,23 +185,17 @@ func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) 
 		}
 	}
 
-	wg.Add(len(cm.shards))
-
 	go func() {
 		for i := range cm.shards {
-			go func(i int) {
-				cm.shards[i].ForEach(func(k KT, v VT) error {
-					select {
-					case <-cancelCh:
-						return Break
-					case ch <- &KV{k, v}:
-						return nil
-					}
-				})
-				wg.Done()
-			}(i)
+			cm.shards[i].ForEach(func(k KT, v VT) error {
+				select {
+				case <-cancelCh:
+					return Break
+				case ch <- &KV{k, v}:
+					return nil
+				}
+			})
 		}
-		wg.Wait()
 		close(ch)
 		cancelFn()
 	}()
