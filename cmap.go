@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"context"
+	"sync"
 )
 
 type KV struct {
@@ -13,18 +14,15 @@ type KV struct {
 // The default is 256.
 const DefaultShardCount = 1 << 8
 
-// KeyHasher represents an interface to supply your own type of hashing for keys.
-type KeyHasher interface {
-	Hash() uint32
-}
-
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
 	shards []*lmap
 	// HashFn allows using a custom hash function that's used to determain the key's shard.
 	// Defaults to DefaultKeyHasher
 	HashFn func(KT) uint32
-	mod    uint32
+
+	keysPool sync.Pool
+	mod      uint32
 }
 
 // New is an alias for NewSize(DefaultShardCount)
@@ -49,6 +47,12 @@ func NewSize(shardCount int) *CMap {
 
 	for i := range cm.shards {
 		cm.shards[i] = newLmap(shardCount)
+	}
+
+	cm.keysPool.New = func() interface{} {
+		out := make([]KT, 0, shardCount) // good starting round
+
+		return &out // return a ptr to avoid extra allocation on Get/Put
 	}
 
 	return cm
@@ -77,12 +81,12 @@ func (cm *CMap) Set(key KT, val VT) {
 // SetIfNotExists will only assign val to key if it wasn't already set.
 // Use `CMap.Update` if you need more logic.
 func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
-	cm.Update(key, func(oldVal VT) (newVal VT) {
-		if set = oldVal == nil; set {
-			return newVal
-		}
-		return oldVal
-	})
+	sh := cm.shard(key)
+	sh.l.Lock()
+	if _, ok := sh.m[key]; !ok {
+		sh.m[key], set = val, true
+	}
+	sh.l.Unlock()
 	return
 }
 
@@ -124,8 +128,12 @@ func (cm *CMap) Keys() []KT {
 // You can break early by returning an error.
 // It **is** safe to modify the map while using this iterator, however it uses more memory and is slightly slower.
 func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
+	keysP := cm.keysPool.Get().(*[]KT)
+
+	defer cm.keysPool.Put(keysP)
 	for i := range cm.shards {
-		if err := cm.shards[i].ForEach(fn); err != nil {
+		keys := (*keysP)[:0]
+		if err := cm.shards[i].ForEach(keys, fn); err != nil {
 			if err == Break {
 				return nil
 			}

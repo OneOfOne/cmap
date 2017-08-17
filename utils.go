@@ -11,6 +11,11 @@ type (
 	KT interface{}
 	// VT is the ValueType of the map.
 	VT interface{}
+
+	// KeyHasher represents an interface to supply your own type of hashing for keys.
+	KeyHasher interface {
+		Hash() uint32
+	}
 )
 
 // Break is returned to break early from ForEach without returning an error.

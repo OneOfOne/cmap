@@ -75,9 +75,8 @@ func (lm lmap) Len() (ln int) {
 	return
 }
 
-func (lm lmap) ForEach(fn func(key KT, val VT) error) (err error) {
+func (lm lmap) ForEach(keys []KT, fn func(key KT, val VT) error) (err error) {
 	lm.l.RLock()
-	keys := make([]KT, 0, len(lm.m))
 	for key := range lm.m {
 		keys = append(keys, key)
 	}
