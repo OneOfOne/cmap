@@ -4,82 +4,89 @@ import "sync"
 
 type lmap struct {
 	m map[KT]VT
-	l sync.RWMutex
+	l *sync.RWMutex
 }
 
-func (ms *lmap) Set(key KT, v VT) {
-	ms.l.Lock()
-	ms.m[key] = v
-	ms.l.Unlock()
+func newLmap(cap int) *lmap {
+	return &lmap{
+		m: make(map[KT]VT, cap),
+		l: new(sync.RWMutex),
+	}
 }
 
-func (ms *lmap) Update(key KT, fn func(oldVal VT) (newVal VT)) {
-	ms.l.Lock()
-	ms.m[key] = fn(ms.m[key])
-	ms.l.Unlock()
+func (lm lmap) Set(key KT, v VT) {
+	lm.l.Lock()
+	lm.m[key] = v
+	lm.l.Unlock()
 }
 
-func (ms *lmap) Swap(key KT, newV VT) (oldV VT) {
-	ms.l.Lock()
-	oldV = ms.m[key]
-	ms.m[key] = newV
-	ms.l.Unlock()
+func (lm lmap) Update(key KT, fn func(oldVal VT) (newVal VT)) {
+	lm.l.Lock()
+	lm.m[key] = fn(lm.m[key])
+	lm.l.Unlock()
+}
+
+func (lm lmap) Swap(key KT, newV VT) (oldV VT) {
+	lm.l.Lock()
+	oldV = lm.m[key]
+	lm.m[key] = newV
+	lm.l.Unlock()
 	return
 }
 
-func (ms *lmap) Get(key KT) (v VT) {
-	ms.l.RLock()
-	v = ms.m[key]
-	ms.l.RUnlock()
+func (lm lmap) Get(key KT) (v VT) {
+	lm.l.RLock()
+	v = lm.m[key]
+	lm.l.RUnlock()
 	return
 }
-func (ms *lmap) GetOK(key KT) (v VT, ok bool) {
-	ms.l.RLock()
-	v, ok = ms.m[key]
-	ms.l.RUnlock()
-	return
-}
-
-func (ms *lmap) Has(key KT) (ok bool) {
-	ms.l.RLock()
-	_, ok = ms.m[key]
-	ms.l.RUnlock()
+func (lm lmap) GetOK(key KT) (v VT, ok bool) {
+	lm.l.RLock()
+	v, ok = lm.m[key]
+	lm.l.RUnlock()
 	return
 }
 
-func (ms *lmap) Delete(key KT) {
-	ms.l.Lock()
-	delete(ms.m, key)
-	ms.l.Unlock()
+func (lm lmap) Has(key KT) (ok bool) {
+	lm.l.RLock()
+	_, ok = lm.m[key]
+	lm.l.RUnlock()
+	return
 }
 
-func (ms *lmap) DeleteAndGet(key KT) (v VT) {
-	ms.l.Lock()
-	v = ms.m[key]
-	delete(ms.m, key)
-	ms.l.Unlock()
+func (lm lmap) Delete(key KT) {
+	lm.l.Lock()
+	delete(lm.m, key)
+	lm.l.Unlock()
+}
+
+func (lm lmap) DeleteAndGet(key KT) (v VT) {
+	lm.l.Lock()
+	v = lm.m[key]
+	delete(lm.m, key)
+	lm.l.Unlock()
 	return v
 }
 
-func (ms *lmap) Len() (ln int) {
-	ms.l.RLock()
-	ln = len(ms.m)
-	ms.l.RUnlock()
+func (lm lmap) Len() (ln int) {
+	lm.l.RLock()
+	ln = len(lm.m)
+	lm.l.RUnlock()
 	return
 }
 
-func (ms *lmap) ForEach(fn func(key KT, val VT) error) (err error) {
-	ms.l.RLock()
-	keys := make([]KT, 0, len(ms.m))
-	for key := range ms.m {
+func (lm lmap) ForEach(fn func(key KT, val VT) error) (err error) {
+	lm.l.RLock()
+	keys := make([]KT, 0, len(lm.m))
+	for key := range lm.m {
 		keys = append(keys, key)
 	}
-	ms.l.RUnlock()
+	lm.l.RUnlock()
 
 	for _, key := range keys {
-		ms.l.RLock()
-		val, ok := ms.m[key]
-		ms.l.RUnlock()
+		lm.l.RLock()
+		val, ok := lm.m[key]
+		lm.l.RUnlock()
 		if !ok {
 			continue
 		}
@@ -91,11 +98,11 @@ func (ms *lmap) ForEach(fn func(key KT, val VT) error) (err error) {
 	return
 }
 
-func (ms *lmap) ForEachLocked(fn func(key KT, val VT) error) (err error) {
-	ms.l.RLock()
-	defer ms.l.RUnlock()
+func (lm lmap) ForEachLocked(fn func(key KT, val VT) error) (err error) {
+	lm.l.RLock()
+	defer lm.l.RUnlock()
 
-	for key, val := range ms.m {
+	for key, val := range lm.m {
 		if err = fn(key, val); err != nil {
 			return
 		}

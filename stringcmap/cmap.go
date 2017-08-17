@@ -19,7 +19,7 @@ const DefaultShardCount = cmap.DefaultShardCount
 
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
-	shards []lmap
+	shards []*lmap
 	mod    uint32
 }
 
@@ -38,12 +38,12 @@ func NewSize(shardCount int) *CMap {
 	}
 
 	cm := &CMap{
-		shards: make([]lmap, shardCount),
+		shards: make([]*lmap, shardCount),
 		mod:    uint32(shardCount) - 1,
 	}
 
 	for i := range cm.shards {
-		cm.shards[i].m = make(map[string]interface{})
+		cm.shards[i] = newLmap(shardCount)
 	}
 
 	return cm
@@ -51,7 +51,7 @@ func NewSize(shardCount int) *CMap {
 
 func (cm *CMap) shardForKey(key string) *lmap {
 	h := cmap.Fnv32(key)
-	return &cm.shards[h&cm.mod]
+	return cm.shards[h&cm.mod]
 }
 
 // Get is the equivalent of `val := map[key]`.
@@ -105,7 +105,7 @@ func (cm *CMap) Swap(key string, val interface{}) interface{} {
 func (cm *CMap) Keys() []string {
 	out := make([]string, 0, cm.Len())
 	for i := range cm.shards {
-		sh := &cm.shards[i]
+		sh := cm.shards[i]
 		sh.l.RLock()
 		for k := range sh.m {
 			out = append(out, k)

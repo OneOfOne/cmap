@@ -6,6 +6,13 @@ import (
 	"math"
 )
 
+type (
+	// KT is the KeyType of the map, used for generating specialized versions.
+	KT interface{}
+	// VT is the ValueType of the map.
+	VT interface{}
+)
+
 // Break is returned to break early from ForEach without returning an error.
 var Break = errors.New("break")
 
@@ -55,8 +62,8 @@ const prime32 = uint32(16777619)
 func Fnv32(key string) uint32 {
 	hash := uint32(2166136261)
 
-	// workaround not being able to inline for loops
-	// watching https://github.com/golang/go/issues/21490
+	// workaround not being able to inline for loops.
+	// https://github.com/golang/go/issues/21490
 	if len(key) > 0 {
 		i := 0
 	L:

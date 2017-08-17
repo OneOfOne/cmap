@@ -48,21 +48,21 @@ func main() {
 
 ## Benchmark
 ```bash
-➤ go1.9rc2 test -v -bench=. -benchtime=5s -tags streamrail -benchmem -cpu 8 -short ./ ./stringcmap
+➤ go1.9rc2 test -v -bench=. -benchtime=5s -tags streamrail -benchmem -cpu 8 -short ./...
 
 goos: linux
 goarch: amd64
 pkg: github.com/OneOfOne/cmap
 
-BenchmarkCMap/2048-8  	50000000	       147 ns/op	      48 B/op	       3 allocs/op
-BenchmarkCMap/4096-8  	50000000	       134 ns/op	      48 B/op	       3 allocs/op
-BenchmarkCMap/8192-8  	50000000	       128 ns/op	      48 B/op	       3 allocs/op
+BenchmarkCMap/2048-8  	100000000	        85.3 ns/op	      48 B/op	       3 allocs/op
+BenchmarkCMap/4096-8  	100000000	        88.2 ns/op	      48 B/op	       3 allocs/op
+BenchmarkCMap/8192-8  	100000000	        92.3 ns/op	      48 B/op	       3 allocs/op
 
 # simple map[interface{}]interface{} wrapped with a sync.RWMutex
-BenchmarkMutexMap-8   	20000000	       404 ns/op	      32 B/op	       2 allocs/op
+BenchmarkMutexMap-8   	20000000	       491 ns/op	      32 B/op	       2 allocs/op
 
 # sync.Map
-BenchmarkSyncMap-8    	50000000	       141 ns/op	      48 B/op	       3 allocs/op
+BenchmarkSyncMap-8    	50000000	       124 ns/op	      48 B/op	       3 allocs/op
 
 PASS
 ok  	github.com/OneOfOne/cmap	40.197s
@@ -72,14 +72,14 @@ goarch: amd64
 pkg: github.com/OneOfOne/cmap/stringcmap
 
 # specialized version of CMap, using map[string]interface{} internally
-BenchmarkStringCMap/2048-8         	100000000	        61.5 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStringCMap/4096-8         	100000000	        58.0 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStringCMap/8192-8         	100000000	        51.1 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStringCMap/2048-8         	200000000	        38.3 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStringCMap/4096-8         	200000000	        39.8 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStringCMap/8192-8         	200000000	        41.3 ns/op	      16 B/op	       1 allocs/op
 
 # github.com/streamrail/concurrent-map
-BenchmarkStreamrail/2048-8         	100000000	        64.7 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStreamrail/4096-8         	100000000	        62.1 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStreamrail/8192-8         	100000000	        61.5 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStreamrail/2048-8         	100000000	        51.6 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStreamrail/4096-8         	100000000	        51.2 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStreamrail/8192-8         	100000000	        50.6 ns/op	      16 B/op	       1 allocs/op
 
 PASS
 ok  	github.com/OneOfOne/cmap/stringcmap	36.413s

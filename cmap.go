@@ -1,20 +1,13 @@
 package cmap
 
-import "context"
-
-type (
-
-	// KT is the KeyType of the map, used for generating specialized versions.
-	KT interface{}
-	// VT is the ValueType of the map.
-	VT interface{}
-
-	// KV is returned from the Iter channel.
-	KV struct {
-		Key   KT
-		Value VT
-	}
+import (
+	"context"
 )
+
+type KV struct {
+	Key   KT
+	Value VT
+}
 
 // DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
 // The default is 256.
@@ -27,7 +20,7 @@ type KeyHasher interface {
 
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
-	shards []lmap
+	shards []*lmap
 	// HashFn allows using a custom hash function that's used to determain the key's shard.
 	// Defaults to DefaultKeyHasher
 	HashFn func(KT) uint32
@@ -49,36 +42,36 @@ func NewSize(shardCount int) *CMap {
 	}
 
 	cm := &CMap{
-		shards: make([]lmap, shardCount),
+		shards: make([]*lmap, shardCount),
 		mod:    uint32(shardCount) - 1,
 		HashFn: DefaultKeyHasher,
 	}
 
 	for i := range cm.shards {
-		cm.shards[i].m = make(map[KT]VT)
+		cm.shards[i] = newLmap(shardCount)
 	}
 
 	return cm
 }
 
-func (cm *CMap) shardForKey(key KT) *lmap {
+func (cm *CMap) shard(key KT) *lmap {
 	h := cm.HashFn(key)
-	return &cm.shards[h&cm.mod]
+	return cm.shards[h&cm.mod]
 }
 
 // Get is the equivalent of `val := map[key]`.
 func (cm *CMap) Get(key KT) (val VT) {
-	return cm.shardForKey(key).Get(key)
+	return cm.shard(key).Get(key)
 }
 
 // GetOK is the equivalent of `val, ok := map[key]`.
 func (cm *CMap) GetOK(key KT) (val VT, ok bool) {
-	return cm.shardForKey(key).GetOK(key)
+	return cm.shard(key).GetOK(key)
 }
 
 // Set is the equivalent of `map[key] = val`.
 func (cm *CMap) Set(key KT, val VT) {
-	cm.shardForKey(key).Set(key, val)
+	cm.shard(key).Set(key, val)
 }
 
 // SetIfNotExists will only assign val to key if it wasn't already set.
@@ -94,30 +87,30 @@ func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
 }
 
 // Has is the equivalent of `_, ok := map[key]`.
-func (cm *CMap) Has(key KT) bool { return cm.shardForKey(key).Has(key) }
+func (cm *CMap) Has(key KT) bool { return cm.shard(key).Has(key) }
 
 // Delete is the equivalent of `delete(map, key)`.
-func (cm *CMap) Delete(key KT) { cm.shardForKey(key).Delete(key) }
+func (cm *CMap) Delete(key KT) { cm.shard(key).Delete(key) }
 
 // DeleteAndGet is the equivalent of `oldVal := map[key]; delete(map, key)`.
-func (cm *CMap) DeleteAndGet(key KT) VT { return cm.shardForKey(key).DeleteAndGet(key) }
+func (cm *CMap) DeleteAndGet(key KT) VT { return cm.shard(key).DeleteAndGet(key) }
 
 // Update calls `fn` with the key's old value (or nil if it didn't exist) and assign the returned value to the key.
 // The shard containing the key will be locked, it is NOT safe to call other cmap funcs inside `fn`.
 func (cm *CMap) Update(key KT, fn func(oldval VT) (newval VT)) {
-	cm.shardForKey(key).Update(key, fn)
+	cm.shard(key).Update(key, fn)
 }
 
 // Swap is the equivalent of `oldVal, map[key] = map[key], newVal`.
 func (cm *CMap) Swap(key KT, val VT) VT {
-	return cm.shardForKey(key).Swap(key, val)
+	return cm.shard(key).Swap(key, val)
 }
 
 // Keys returns a slice of all the keys of the map.
 func (cm *CMap) Keys() []KT {
 	out := make([]KT, 0, cm.Len())
 	for i := range cm.shards {
-		sh := &cm.shards[i]
+		sh := cm.shards[i]
 		sh.l.RLock()
 		for k := range sh.m {
 			out = append(out, k)
