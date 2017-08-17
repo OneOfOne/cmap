@@ -17,6 +17,21 @@ func init() {
 	}
 }
 
+func TestIter(t *testing.T) {
+	cm := cmap.New()
+	for i := 0; i < 100; i++ {
+		cm.Set(i, i)
+	}
+	ch, cancel := cm.IterWithCancel(0)
+	i := 0
+	for kv := range ch {
+		t.Logf("%d: %+v", i, kv)
+		if i++; i > 10 {
+			cancel()
+		}
+	}
+}
+
 func benchCmapSetGet(b *testing.B, sz int) {
 	cm := cmap.NewSize(sz)
 	b.ResetTimer()

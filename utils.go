@@ -5,10 +5,12 @@ import (
 	"math"
 )
 
+var errBreak = fmt.Errorf("break")
+
 // DefaultKeyHasher returns a hash for the specific key for internal sharding.
 // By default, those types are supported as keys: string, uint64, int64, uint32, int32, uint16, int16, uint8, int8, uint, int,
 //  float64, float32 and KeyHasher.
-func DefaultKeyHasher(key interface{}) uint32 {
+func DefaultKeyHasher(key KT) uint32 {
 	switch key := key.(type) {
 	case KeyHasher:
 		return rehash32(key.Hash())
