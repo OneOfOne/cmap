@@ -3,8 +3,8 @@ sudo: false
 
 go:
   - 1.8
-  - tip
+  - 1.9rc2
 
 script:
   - go test -v ./...
-  - go test -v -bench=. ./...
+  - go test -v -bench=. -tags streamrail ./...

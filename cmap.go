@@ -56,6 +56,10 @@ func (cm *CMap) Get(key interface{}) (val interface{}) {
 	return cm.shard(key).Get(key)
 }
 
+func (cm *CMap) GetOK(key interface{}) (val interface{}, ok bool) {
+	return cm.shard(key).GetOK(key)
+}
+
 func (cm *CMap) Set(key, val interface{}) {
 	cm.shard(key).Set(key, val)
 }

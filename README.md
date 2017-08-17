@@ -7,6 +7,16 @@ CMap (concurrent-map) is a sharded map implementation to support fast concurrent
 
 	go get github.com/OneOfOne/cmap
 
+## FAQ
+
+### Why?
+* A simple sync.RWMutex wrapped map is much slower as the concurrency increase.
+* Provides several helper functions, Swap(), Update, DeleteAndGet.
+
+### Why not `sync.Map`?
+* `sync.Map` is great, I absolute love it if all you need is pure Load/Store, however you can't safely update values in it.
+* There was something else major, I can't remember it right now.
+
 ## Usage
 
 ```go
@@ -22,68 +32,57 @@ func main() {
 	if v, ok := cm.Get("key").(string); ok {
 		// do something with v
 	}
+	cm.Update("key", func(old interface{}) interface{} {
+		v, _ := old.(uint64)
+		return v + 1
+	})
 }
 ```
 
 ## Benchmark
 ```bash
-➤ go test -bench=. -benchmem -tags streamrail -benchtime 2s -cpu 1,8,32 -short
-# map[interface{}]interface{}
-BenchmarkCMap/2048                      20000000               172 ns/op             0 B/op          0 allocs/op
-BenchmarkCMap/4096                      20000000               166 ns/op             0 B/op          0 allocs/op
-BenchmarkCMap/8192                      20000000               165 ns/op             0 B/op          0 allocs/op
+➤ go1.9rc2 test -v -bench=. -benchtime=5s -tags streamrail -benchmem -cpu 8 -short ./ ./stringcmap
 
-BenchmarkCMap/4096-8                    50000000              42.8 ns/op             0 B/op          0 allocs/op
-BenchmarkCMap/2048-8                    50000000              46.0 ns/op             0 B/op          0 allocs/op
-BenchmarkCMap/8192-8                    100000000             41.8 ns/op             0 B/op          0 allocs/op
+goos: linux
+goarch: amd64
+pkg: github.com/OneOfOne/cmap
 
-BenchmarkCMap/2048-32                   100000000             43.2 ns/op             0 B/op          0 allocs/op
-BenchmarkCMap/4096-32                   100000000             41.3 ns/op             0 B/op          0 allocs/op
-BenchmarkCMap/8192-32                   100000000             39.1 ns/op             0 B/op          0 allocs/op
+BenchmarkCMap/2048-8  	50000000	       147 ns/op	      48 B/op	       3 allocs/op
+BenchmarkCMap/4096-8  	50000000	       134 ns/op	      48 B/op	       3 allocs/op
+BenchmarkCMap/8192-8  	50000000	       128 ns/op	      48 B/op	       3 allocs/op
 
-# map[string]interface{}
-BenchmarkCMapString/2048                20000000               185 ns/op            16 B/op          1 allocs/op
-BenchmarkCMapString/4096                20000000               178 ns/op            16 B/op          1 allocs/op
-BenchmarkCMapString/8192                20000000               171 ns/op            16 B/op          1 allocs/op
-
-BenchmarkCMapString/2048-8              50000000              47.6 ns/op            16 B/op          1 allocs/op
-BenchmarkCMapString/4096-8              100000000             44.7 ns/op            16 B/op          1 allocs/op
-BenchmarkCMapString/8192-8              100000000             42.9 ns/op            16 B/op          1 allocs/op
-
-BenchmarkCMapString/2048-32             50000000              51.1 ns/op            16 B/op          1 allocs/op
-BenchmarkCMapString/4096-32             50000000              48.7 ns/op            16 B/op          1 allocs/op
-BenchmarkCMapString/8192-32             100000000             46.0 ns/op            16 B/op          1 allocs/op
-
-# map[interface{}]interface{} protected with sync.RWMutex
-BenchmarkMutexMap                       20000000               136 ns/op             0 B/op          0 allocs/op
-BenchmarkMutexMap-8                     20000000               177 ns/op             0 B/op          0 allocs/op
-BenchmarkMutexMap-32                    20000000               178 ns/o              0 B/op          0 allocs/op
+# simple map[interface{}]interface{} wrapped with a sync.RWMutex
+BenchmarkMutexMap-8   	20000000	       404 ns/op	      32 B/op	       2 allocs/op
 
 # sync.Map
-BenchmarkSyncMap                        20000000               157 ns/op            16 B/op          1 allocs/op
-BenchmarkSyncMap-8                      100000000             38.2 ns/op            16 B/op          1 allocs/op
-BenchmarkSyncMap-32                     100000000             41.0 ns/op            16 B/op          1 allocs/op
+BenchmarkSyncMap-8    	50000000	       141 ns/op	      48 B/op	       3 allocs/op
 
-BenchmarkStreamrail/2048                20000000               201 ns/op            16 B/op          1 allocs/op
-BenchmarkStreamrail/4096                20000000               196 ns/op            16 B/op          1 allocs/op
-BenchmarkStreamrail/8192                20000000               188 ns/op            16 B/op          1 allocs/op
-
-BenchmarkStreamrail/2048-8              50000000              50.0 ns/op            16 B/op          1 allocs/op
-BenchmarkStreamrail/4096-8              50000000              49.3 ns/op            16 B/op          1 allocs/op
-BenchmarkStreamrail/8192-8              50000000              45.7 ns/op            16 B/op          1 allocs/op
-
-BenchmarkStreamrail/2048-32             50000000              53.2 ns/op            16 B/op          1 allocs/op
-BenchmarkStreamrail/4096-32             50000000              53.4 ns/op            16 B/op          1 allocs/op
-BenchmarkStreamrail/8192-32             50000000              47.9 ns/op            16 B/op          1 allocs/op
 PASS
-ok      github.com/OneOfOne/cmap        118.483s
+ok  	github.com/OneOfOne/cmap	40.197s
+
+goos: linux
+goarch: amd64
+pkg: github.com/OneOfOne/cmap/stringcmap
+
+# specialized version of CMap, using map[string]interface{} internally
+BenchmarkStringCMap/2048-8         	100000000	        61.5 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStringCMap/4096-8         	100000000	        58.0 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStringCMap/8192-8         	100000000	        51.1 ns/op	      16 B/op	       1 allocs/op
+
+# github.com/streamrail/concurrent-map
+BenchmarkStreamrail/2048-8         	100000000	        64.7 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStreamrail/4096-8         	100000000	        62.1 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStreamrail/8192-8         	100000000	        61.5 ns/op	      16 B/op	       1 allocs/op
+
+PASS
+ok  	github.com/OneOfOne/cmap/stringcmap	36.413s
 ```
 
 ## License
 
 Apache v2.0 (see [LICENSE](https://github.com/OneOfOne/cmap/blob/master/LICENSE) file).
 
-Copyright 2016-2016 Ahmed <[OneOfOne](https://github.com/OneOfOne/)> W.
+Copyright 2016-2017 Ahmed <[OneOfOne](https://github.com/OneOfOne/)> W.
 
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
