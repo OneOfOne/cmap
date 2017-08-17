@@ -1,13 +1,17 @@
 package cmap
 
 import (
+	"errors"
 	"fmt"
 	"math"
 )
 
+// Break is returned to break early from ForEach without returning an error.
+var Break = errors.New("break")
+
 // DefaultKeyHasher returns a hash for the specific key for internal sharding.
-// By default, those types are supported as keys: KeyHasher, string, uint64, int64, uint32, int32, uint16, int16, uint8, int8, uint, int,
-//  float64, float32 and fmt.Stringer.
+// By default, those types are supported as keys: KeyHasher, string, uint64, int64, uint32, int32, uint16, int16, uint8,
+// int8, uint, int, float64, float32 and fmt.Stringer.
 func DefaultKeyHasher(key KT) uint32 {
 	switch key := key.(type) {
 	case KeyHasher:

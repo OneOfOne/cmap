@@ -1,7 +1,6 @@
 package stringcmap
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/OneOfOne/cmap"
@@ -117,6 +116,9 @@ func (cm *CMap) Keys() []string {
 func (cm *CMap) ForEach(fn func(key string, val interface{}) error) error {
 	for i := range cm.shards {
 		if err := cm.shards[i].ForEach(fn); err != nil {
+			if err == cmap.Break {
+				err = nil
+			}
 			return err
 		}
 	}
@@ -136,8 +138,6 @@ func (cm *CMap) Iter(buffer int) <-chan *KV {
 	ch, _ := cm.IterWithCancel(buffer)
 	return ch
 }
-
-var errBreak = fmt.Errorf("break")
 
 // IterWithCancel returns a channel to be used in for range and
 // a cancelFn that can be called at any time to cleanly exit early.
@@ -168,7 +168,7 @@ func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) 
 				cm.shards[i].ForEach(func(k string, v interface{}) error {
 					select {
 					case <-cancelCh:
-						return errBreak
+						return cmap.Break
 					case ch <- &KV{k, v}:
 						return nil
 					}
