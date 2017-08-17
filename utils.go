@@ -5,17 +5,15 @@ import (
 	"math"
 )
 
-var errBreak = fmt.Errorf("break")
-
 // DefaultKeyHasher returns a hash for the specific key for internal sharding.
-// By default, those types are supported as keys: string, uint64, int64, uint32, int32, uint16, int16, uint8, int8, uint, int,
-//  float64, float32 and KeyHasher.
+// By default, those types are supported as keys: KeyHasher, string, uint64, int64, uint32, int32, uint16, int16, uint8, int8, uint, int,
+//  float64, float32 and fmt.Stringer.
 func DefaultKeyHasher(key KT) uint32 {
 	switch key := key.(type) {
 	case KeyHasher:
 		return rehash32(key.Hash())
 	case string:
-		return fnv32(key)
+		return Fnv32(key)
 	case int:
 		return rehash32(uint32(key))
 	case uint:
@@ -40,22 +38,15 @@ func DefaultKeyHasher(key KT) uint32 {
 		return rehash32(uint32(math.Float64bits(key)))
 	case float32:
 		return rehash32(uint32(math.Float32bits(key)))
+	case fmt.Stringer:
+		return Fnv32(key.String())
 	default:
 		panic(fmt.Sprintf("unsupported type: %T (%v)", key, key))
 	}
 }
 
-func fnv64(key string) uint64 {
-	const prime64 = 1099511628211
-	hash := uint64(14695981039346656037)
-	for _, r := range key {
-		hash *= prime64
-		hash ^= uint64(r)
-	}
-	return hash
-}
-
-func fnv32(key string) uint32 {
+// Fnv32 the default hash func we use for strings.
+func Fnv32(key string) uint32 {
 	const prime32 = uint32(16777619)
 	hash := uint32(2166136261)
 	for i := 0; i < len(key); i++ {
@@ -65,23 +56,12 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
-// bastardized fnv64 for numeric keys
-func rehash64(key uint64) uint64 {
-	const prime64 = 1099511628211
-	hash := uint64(14695981039346656037)
-	for ; key > 0; key = key >> 2 {
-		hash *= prime64
-		hash ^= uint64(key)
-	}
-	return hash
-}
-
-func rehash32(key uint32) uint32 {
-	const prime32 = uint32(16777619)
-	hash := uint32(2166136261)
-	for ; key > 0; key = key >> 2 {
-		hash *= prime32
-		hash ^= uint32(key)
-	}
-	return hash
+func rehash32(h uint32) uint32 {
+	// We apply this secondary hashing discovered by Doug Lea to defend
+	// against bad hashes.
+	h += h ^ (h << 9)
+	h ^= h >> 14
+	h += h << 4
+	h ^= h >> 10
+	return h
 }

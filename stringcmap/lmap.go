@@ -68,18 +68,15 @@ func (ms *lmap) Len() (ln int) {
 	return
 }
 
-func (ms *lmap) Keys() []string {
+func (ms *lmap) ForEach(fn func(key string, val interface{}) error) (err error) {
 	ms.l.RLock()
 	keys := make([]string, 0, len(ms.m))
 	for key := range ms.m {
 		keys = append(keys, key)
 	}
 	ms.l.RUnlock()
-	return keys
-}
 
-func (ms *lmap) ForEach(fn func(key string, val interface{}) error) (err error) {
-	for _, key := range ms.Keys() {
+	for _, key := range keys {
 		ms.l.RLock()
 		val, ok := ms.m[key]
 		ms.l.RUnlock()

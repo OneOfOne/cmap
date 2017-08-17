@@ -7,6 +7,14 @@ CMap (concurrent-map) is a sharded map implementation to support fast concurrent
 
 	go get github.com/OneOfOne/cmap
 
+## Features
+
+* Full concurrent access (except for Update).
+* Supports `Get`, `Set`, `SetIfNotExists`, `Swap`, `Update`, `Delete`, `DeleteAndGet` (Pop).
+* `ForEach` / `Iter` supports modifing the map during the iteration like `map` and `sync.Map`.
+* `stringcmap.CMap` gives a specialized version to support map[string]interface{}.
+* `stringcmap.MapWithJSON` implements json.Unmarshaler with a custom value unmarshaler.
+
 ## FAQ
 
 ### Why?
@@ -15,7 +23,6 @@ CMap (concurrent-map) is a sharded map implementation to support fast concurrent
 
 ### Why not `sync.Map`?
 * `sync.Map` is great, I absolute love it if all you need is pure Load/Store, however you can't safely update values in it.
-* There was something else major, I can't remember it right now.
 
 ## Usage
 

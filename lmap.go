@@ -3,23 +3,23 @@ package cmap
 import "sync"
 
 type lmap struct {
-	m map[interface{}]interface{}
+	m map[KT]VT
 	l sync.RWMutex
 }
 
-func (ms *lmap) Set(key interface{}, v interface{}) {
+func (ms *lmap) Set(key KT, v VT) {
 	ms.l.Lock()
 	ms.m[key] = v
 	ms.l.Unlock()
 }
 
-func (ms *lmap) Update(key interface{}, fn func(oldVal interface{}) (newVal interface{})) {
+func (ms *lmap) Update(key KT, fn func(oldVal VT) (newVal VT)) {
 	ms.l.Lock()
 	ms.m[key] = fn(ms.m[key])
 	ms.l.Unlock()
 }
 
-func (ms *lmap) Swap(key interface{}, newV interface{}) (oldV interface{}) {
+func (ms *lmap) Swap(key KT, newV VT) (oldV VT) {
 	ms.l.Lock()
 	oldV = ms.m[key]
 	ms.m[key] = newV
@@ -27,33 +27,33 @@ func (ms *lmap) Swap(key interface{}, newV interface{}) (oldV interface{}) {
 	return
 }
 
-func (ms *lmap) Get(key interface{}) (v interface{}) {
+func (ms *lmap) Get(key KT) (v VT) {
 	ms.l.RLock()
 	v = ms.m[key]
 	ms.l.RUnlock()
 	return
 }
-func (ms *lmap) GetOK(key interface{}) (v interface{}, ok bool) {
+func (ms *lmap) GetOK(key KT) (v VT, ok bool) {
 	ms.l.RLock()
 	v, ok = ms.m[key]
 	ms.l.RUnlock()
 	return
 }
 
-func (ms *lmap) Has(key interface{}) (ok bool) {
+func (ms *lmap) Has(key KT) (ok bool) {
 	ms.l.RLock()
 	_, ok = ms.m[key]
 	ms.l.RUnlock()
 	return
 }
 
-func (ms *lmap) Delete(key interface{}) {
+func (ms *lmap) Delete(key KT) {
 	ms.l.Lock()
 	delete(ms.m, key)
 	ms.l.Unlock()
 }
 
-func (ms *lmap) DeleteAndGet(key interface{}) (v interface{}) {
+func (ms *lmap) DeleteAndGet(key KT) (v VT) {
 	ms.l.Lock()
 	v = ms.m[key]
 	delete(ms.m, key)
@@ -68,9 +68,9 @@ func (ms *lmap) Len() (ln int) {
 	return
 }
 
-func (ms *lmap) ForEach(fn func(key, val interface{}) error) (err error) {
+func (ms *lmap) ForEach(fn func(key KT, val VT) error) (err error) {
 	ms.l.RLock()
-	keys := make([]interface{}, 0, len(ms.m))
+	keys := make([]KT, 0, len(ms.m))
 	for key := range ms.m {
 		keys = append(keys, key)
 	}

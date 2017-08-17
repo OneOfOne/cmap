@@ -1,12 +1,21 @@
 package cmap
 
 import (
+	"fmt"
 	"sync"
-	"sync/atomic"
+)
+
+type (
+
+	// KT is the KeyType of the map, used for generating specialized versions.
+	KT interface{}
+	// VT is the ValueType of the map.
+	VT interface{}
 )
 
 // DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
-const DefaultShardCount = 1 << 8 // 256
+// The default is 256.
+const DefaultShardCount = 1 << 8
 
 // KeyHasher represents an interface to supply your own type of hashing for keys.
 type KeyHasher interface {
@@ -16,7 +25,9 @@ type KeyHasher interface {
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
 	shards []lmap
-	HashFn func(interface{}) uint32
+	// HashFn allows using a custom hash function that's used to determain the key's shard.
+	// Defaults to DefaultKeyHasher
+	HashFn func(KT) uint32
 	mod    uint32
 }
 
@@ -25,7 +36,7 @@ func New() *CMap { return NewSize(DefaultShardCount) }
 
 // NewSize returns a CMap with the specific shardSize, note that for performance reasons,
 // shardCount must be a power of 2.
-// Hash shardCount will improve concurrency but will consume much more memory.
+// Higher shardCount will improve concurrency but will consume more memory.
 func NewSize(shardCount int) *CMap {
 	// must be a power of 2
 	if shardCount < 1 {
@@ -41,43 +52,69 @@ func NewSize(shardCount int) *CMap {
 	}
 
 	for i := range cm.shards {
-		cm.shards[i].m = make(map[interface{}]interface{})
+		cm.shards[i].m = make(map[KT]VT)
 	}
 
 	return cm
 }
 
-func (cm *CMap) shard(key interface{}) *lmap {
+func (cm *CMap) shard(key KT) *lmap {
 	h := cm.HashFn(key)
 	return &cm.shards[h&cm.mod]
 }
 
-func (cm *CMap) Get(key interface{}) (val interface{}) {
+// Get is the equivalent of `val := map[key]`.
+func (cm *CMap) Get(key KT) (val VT) {
 	return cm.shard(key).Get(key)
 }
 
-func (cm *CMap) GetOK(key interface{}) (val interface{}, ok bool) {
+// GetOK is the equivalent of `val, ok := map[key]`.
+func (cm *CMap) GetOK(key KT) (val VT, ok bool) {
 	return cm.shard(key).GetOK(key)
 }
 
-func (cm *CMap) Set(key, val interface{}) {
+// Set is the equivalent of `map[key] = val`.
+func (cm *CMap) Set(key KT, val VT) {
 	cm.shard(key).Set(key, val)
 }
 
-func (cm *CMap) Has(key string) bool                 { return cm.shard(key).Has(key) }
-func (cm *CMap) Delete(key string)                   { cm.shard(key).Delete(key) }
-func (cm *CMap) DeleteAndGet(key string) interface{} { return cm.shard(key).DeleteAndGet(key) }
+// SetIfNotExists will only assign val to key if it wasn't already set.
+// Use `CMap.Update` if you need more logic.
+func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
+	cm.Update(key, func(oldVal VT) (newVal VT) {
+		switch oldVal.(type) {
+		case nil:
+			return newVal
+		default:
+			return oldVal
+		}
+	})
+	return
+}
 
-func (cm *CMap) Update(key string, fn func(oldVal interface{}) (newVal interface{})) {
+// Has is the equivalent of `_, ok := map[key]`.
+func (cm *CMap) Has(key KT) bool { return cm.shard(key).Has(key) }
+
+// Delete is the equivalent of `delete(map, key)`.
+func (cm *CMap) Delete(key KT) { cm.shard(key).Delete(key) }
+
+// DeleteAndGet is the equivalent of `oldVal := map[key]; delete(map, key)`.
+func (cm *CMap) DeleteAndGet(key KT) VT { return cm.shard(key).DeleteAndGet(key) }
+
+// Update calls `fn` with the key's old value (or nil if it didn't exist) and assign the returned value to the key.
+// The shard containing the key will be locked, it is NOT safe to call other cmap funcs inside `fn`.
+func (cm *CMap) Update(key KT, fn func(oldval VT) (newval VT)) {
 	cm.shard(key).Update(key, fn)
 }
 
-func (cm *CMap) Swap(key string, val interface{}) interface{} {
+// Swap is the equivalent of `oldVal, map[key] = map[key], newVal`.
+func (cm *CMap) Swap(key KT, val VT) VT {
 	return cm.shard(key).Swap(key, val)
 }
 
-func (cm *CMap) Keys() []interface{} {
-	out := make([]interface{}, 0, cm.Len())
+// Keys returns a slice of all the keys of the map.
+func (cm *CMap) Keys() []KT {
+	out := make([]KT, 0, cm.Len())
 	for i := range cm.shards {
 		sh := &cm.shards[i]
 		sh.l.RLock()
@@ -89,7 +126,10 @@ func (cm *CMap) Keys() []interface{} {
 	return out
 }
 
-func (cm *CMap) ForEach(fn func(key, val interface{}) error) error {
+// ForEach loops over all the key/values in all the shards in order.
+// You can break early by returning an error.
+// it is safe to change the map inside fn.
+func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
 	for i := range cm.shards {
 		if err := cm.shards[i].ForEach(fn); err != nil {
 			return err
@@ -98,34 +138,68 @@ func (cm *CMap) ForEach(fn func(key, val interface{}) error) error {
 	return nil
 }
 
-func (cm *CMap) ForEachParallel(fn func(key, val interface{}) error) error {
-	var (
-		wg   sync.WaitGroup
-		errv atomic.Value
-	)
-	for i := range cm.shards {
-		wg.Add(1)
-		go func(i int) {
-			cm.shards[i].ForEach(func(k, v interface{}) error {
-				if err, _ := errv.Load().(error); err != nil {
-					return err
-				}
-
-				if err := fn(k, v); err != nil {
-					errv.Store(err)
-					return err
-				}
-				return nil
-			})
-			wg.Done()
-		}(i)
-	}
-	wg.Wait()
-
-	err, _ := errv.Load().(error)
-	return err
+// KV is returned from the Iter channel.
+type KV struct {
+	Key   KT
+	Value VT
 }
 
+// Iter returns a channel to be used in for range.
+// **Warning** that breaking early will leak up to cm.NumShards() goroutines, use IterWithCancel if you intend to break early.
+// It is safe to modify the map while using the iterator.
+func (cm *CMap) Iter(buffer int) <-chan *KV {
+	ch, _ := cm.IterWithCancel(buffer)
+	return ch
+}
+
+var errBreak = fmt.Errorf("break")
+
+// IterWithCancel returns a channel to be used in for range and
+// a cancelFn that can be called at any time to cleanly exit early.
+// Note that cancelFn will block until all the writers are notified.
+// It is safe to modify the map while using the iterator.
+func (cm *CMap) IterWithCancel(buffer int) (kvChan <-chan *KV, cancelFn func()) {
+	var (
+		wg       sync.WaitGroup
+		ch       = make(chan *KV, buffer)
+		cancelCh = make(chan struct{})
+	)
+
+	kvChan, cancelFn = ch, func() {
+		select {
+		case <-cancelCh:
+		default:
+			close(cancelCh)
+			for range ch {
+			}
+		}
+	}
+
+	wg.Add(len(cm.shards))
+
+	go func() {
+		for i := range cm.shards {
+			go func(i int) {
+				cm.shards[i].ForEach(func(k KT, v VT) error {
+					select {
+					case <-cancelCh:
+						return errBreak
+					case ch <- &KV{k, v}:
+						return nil
+					}
+				})
+				wg.Done()
+			}(i)
+		}
+		wg.Wait()
+		close(ch)
+		cancelFn()
+	}()
+
+	return
+}
+
+// Len returns the number of elements in the map.
 func (cm *CMap) Len() int {
 	ln := 0
 	for i := range cm.shards {
@@ -133,3 +207,6 @@ func (cm *CMap) Len() int {
 	}
 	return ln
 }
+
+// NumShards returns the number of shards in the map.
+func (cm *CMap) NumShards() int { return len(cm.shards) }
