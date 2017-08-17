@@ -49,13 +49,22 @@ func DefaultKeyHasher(key KT) uint32 {
 	}
 }
 
+const prime32 = uint32(16777619)
+
 // Fnv32 the default hash func we use for strings.
 func Fnv32(key string) uint32 {
-	const prime32 = uint32(16777619)
 	hash := uint32(2166136261)
-	for i := 0; i < len(key); i++ {
+
+	// workaround not being able to inline for loops
+	// watching https://github.com/golang/go/issues/21490
+	if len(key) > 0 {
+		i := 0
+	L:
 		hash *= prime32
 		hash ^= uint32(key[i])
+		if i++; i < len(key) {
+			goto L
+		}
 	}
 	return hash
 }

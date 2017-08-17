@@ -61,58 +61,56 @@ func NewSize(shardCount int) *CMap {
 	return cm
 }
 
-func (cm *CMap) shard(key KT) *lmap {
+func (cm *CMap) shardForKey(key KT) *lmap {
 	h := cm.HashFn(key)
 	return &cm.shards[h&cm.mod]
 }
 
 // Get is the equivalent of `val := map[key]`.
 func (cm *CMap) Get(key KT) (val VT) {
-	return cm.shard(key).Get(key)
+	return cm.shardForKey(key).Get(key)
 }
 
 // GetOK is the equivalent of `val, ok := map[key]`.
 func (cm *CMap) GetOK(key KT) (val VT, ok bool) {
-	return cm.shard(key).GetOK(key)
+	return cm.shardForKey(key).GetOK(key)
 }
 
 // Set is the equivalent of `map[key] = val`.
 func (cm *CMap) Set(key KT, val VT) {
-	cm.shard(key).Set(key, val)
+	cm.shardForKey(key).Set(key, val)
 }
 
 // SetIfNotExists will only assign val to key if it wasn't already set.
 // Use `CMap.Update` if you need more logic.
 func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
 	cm.Update(key, func(oldVal VT) (newVal VT) {
-		switch oldVal.(type) {
-		case nil:
+		if set = oldVal == nil; set {
 			return newVal
-		default:
-			return oldVal
 		}
+		return oldVal
 	})
 	return
 }
 
 // Has is the equivalent of `_, ok := map[key]`.
-func (cm *CMap) Has(key KT) bool { return cm.shard(key).Has(key) }
+func (cm *CMap) Has(key KT) bool { return cm.shardForKey(key).Has(key) }
 
 // Delete is the equivalent of `delete(map, key)`.
-func (cm *CMap) Delete(key KT) { cm.shard(key).Delete(key) }
+func (cm *CMap) Delete(key KT) { cm.shardForKey(key).Delete(key) }
 
 // DeleteAndGet is the equivalent of `oldVal := map[key]; delete(map, key)`.
-func (cm *CMap) DeleteAndGet(key KT) VT { return cm.shard(key).DeleteAndGet(key) }
+func (cm *CMap) DeleteAndGet(key KT) VT { return cm.shardForKey(key).DeleteAndGet(key) }
 
 // Update calls `fn` with the key's old value (or nil if it didn't exist) and assign the returned value to the key.
 // The shard containing the key will be locked, it is NOT safe to call other cmap funcs inside `fn`.
 func (cm *CMap) Update(key KT, fn func(oldval VT) (newval VT)) {
-	cm.shard(key).Update(key, fn)
+	cm.shardForKey(key).Update(key, fn)
 }
 
 // Swap is the equivalent of `oldVal, map[key] = map[key], newVal`.
 func (cm *CMap) Swap(key KT, val VT) VT {
-	return cm.shard(key).Swap(key, val)
+	return cm.shardForKey(key).Swap(key, val)
 }
 
 // Keys returns a slice of all the keys of the map.
@@ -192,12 +190,10 @@ func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
 			return nil
 		}
 	}
-	for i := range cm.shards {
-		if locked {
-			cm.shards[i].ForEachLocked(fn)
-		} else {
-			cm.shards[i].ForEach(fn)
-		}
+	if locked {
+		cm.ForEachLocked(fn)
+	} else {
+		cm.ForEach(fn)
 	}
 }
 
