@@ -1,4 +1,4 @@
-# cmap [![GoDoc](http://godoc.org/github.com/OneOfOne/cmap?status.svg)](http://godoc.org/github.com/OneOfOne/cmap) [![Build Status](https://travis-ci.org/OneOfOne/cmap.svg?branch=master)](https://travis-ci.org/OneOfOne/cmap)
+# cmap [![GoDoc](https://godoc.org/github.com/OneOfOne/cmap?status.svg)](https://godoc.org/github.com/OneOfOne/cmap) [![Build Status](https://travis-ci.org/OneOfOne/cmap.svg?branch=master)](https://travis-ci.org/OneOfOne/cmap) [![Coverage](https://gocover.io/_badge/github.com/OneOfOne/cmap)](https://gocover.io/github.com/OneOfOne/cmap)
 --
 
 CMap (concurrent-map) is a sharded map implementation to support fast concurrent access.
@@ -48,41 +48,70 @@ func main() {
 
 ## Benchmark
 ```bash
-➤ go1.9rc2 test -v -bench=. -benchtime=5s -tags streamrail -benchmem -cpu 8 -short ./...
+➤ go version; go test -tags streamrail -short -bench=. -benchmem ./ ./stringcmap/ | benchstat /dev/stdin
+go version devel +ff90f4af66 2017-08-19 12:56:24 +0000 linux/amd64
 
-goos: linux
-goarch: amd64
-pkg: github.com/OneOfOne/cmap
-
-BenchmarkCMap/2048-8  	100000000	        85.3 ns/op	      48 B/op	       3 allocs/op
-BenchmarkCMap/4096-8  	100000000	        88.2 ns/op	      48 B/op	       3 allocs/op
-BenchmarkCMap/8192-8  	100000000	        92.3 ns/op	      48 B/op	       3 allocs/op
+name               time/op
+# pkg:github.com/OneOfOne/cmap goos:linux goarch:amd64
+CMap/2048-8        90.4ns ± 0%
+CMap/4096-8        96.4ns ± 0%
+CMap/8192-8         120ns ± 0%
 
 # simple map[interface{}]interface{} wrapped with a sync.RWMutex
-BenchmarkMutexMap-8   	20000000	       491 ns/op	      32 B/op	       2 allocs/op
+MutexMap-8          338ns ± 0%
 
 # sync.Map
-BenchmarkSyncMap-8    	50000000	       124 ns/op	      48 B/op	       3 allocs/op
+SyncMap-8           152ns ± 0%
 
-PASS
-ok  	github.com/OneOfOne/cmap	40.197s
+# pkg:github.com/OneOfOne/cmap/stringcmap goos:linux goarch:amd64
+StringCMap/2048-8  41.0ns ± 0%
+StringCMap/4096-8  42.8ns ± 0%
+StringCMap/8192-8  42.4ns ± 0%
 
-goos: linux
-goarch: amd64
-pkg: github.com/OneOfOne/cmap/stringcmap
+Streamrail/2048-8  53.5ns ± 0%
+Streamrail/4096-8  51.4ns ± 0%
+Streamrail/8192-8  51.8ns ± 0%
+
+name               alloc/op
+# pkg:github.com/OneOfOne/cmap goos:linux goarch:amd64
+CMap/2048-8         48.0B ± 0%
+CMap/4096-8         48.0B ± 0%
+CMap/8192-8         48.0B ± 0%
+
+MutexMap-8          34.0B ± 0%
+
+SyncMap-8           50.0B ± 0%
+
+# pkg:github.com/OneOfOne/cmap/stringcmap goos:linux goarch:amd64
 
 # specialized version of CMap, using map[string]interface{} internally
-BenchmarkStringCMap/2048-8         	200000000	        38.3 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStringCMap/4096-8         	200000000	        39.8 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStringCMap/8192-8         	200000000	        41.3 ns/op	      16 B/op	       1 allocs/op
+StringCMap/2048-8   16.0B ± 0%
+StringCMap/4096-8   16.0B ± 0%
+StringCMap/8192-8   16.0B ± 0%
 
 # github.com/streamrail/concurrent-map
-BenchmarkStreamrail/2048-8         	100000000	        51.6 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStreamrail/4096-8         	100000000	        51.2 ns/op	      16 B/op	       1 allocs/op
-BenchmarkStreamrail/8192-8         	100000000	        50.6 ns/op	      16 B/op	       1 allocs/op
+Streamrail/2048-8   16.0B ± 0%
+Streamrail/4096-8   16.0B ± 0%
+Streamrail/8192-8   16.0B ± 0%
 
-PASS
-ok  	github.com/OneOfOne/cmap/stringcmap	36.413s
+name               allocs/op
+# pkg:github.com/OneOfOne/cmap goos:linux goarch:amd64
+CMap/2048-8          3.00 ± 0%
+CMap/4096-8          3.00 ± 0%
+CMap/8192-8          3.00 ± 0%
+
+MutexMap-8           2.00 ± 0%
+
+SyncMap-8            3.00 ± 0%
+
+# pkg:github.com/OneOfOne/cmap/stringcmap goos:linux goarch:amd64
+StringCMap/2048-8    1.00 ± 0%
+StringCMap/4096-8    1.00 ± 0%
+StringCMap/8192-8    1.00 ± 0%
+
+Streamrail/2048-8    1.00 ± 0%
+Streamrail/4096-8    1.00 ± 0%
+Streamrail/8192-8    1.00 ± 0%
 ```
 
 ## License
