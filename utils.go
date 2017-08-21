@@ -1,5 +1,6 @@
-//go:generate go run ./cmd/cmap-gen/main.go -v -internal -n cmap -p ./
-//go:generate go run ./cmd/cmap-gen/main.go -v -n stringcmap -kt string -hfn hashers.Fnv32
+//go:generate go install ./cmd/cmap-gen
+//go:generate cmap-gen -v -internal -n cmap -p ./
+//go:generate cmap-gen -v -n stringcmap -kt string -hfn hashers.Fnv32
 //go:generate gometalinter ./ ./stringcmap
 
 package cmap
