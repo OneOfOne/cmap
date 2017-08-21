@@ -7,10 +7,6 @@ import (
 	"github.com/OneOfOne/cmap"
 )
 
-var (
-	Break = cmap.Break
-)
-
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
 	shards   []*LMap
@@ -124,39 +120,33 @@ func (cm *CMap) Keys() []KT {
 }
 
 // ForEach loops over all the key/values in the map.
-// You can break early by returning an error or Break.
+// You can break early by returning false.
 // It **is** safe to modify the map while using this iterator, however it uses more memory and is slightly slower.
-func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
+func (cm *CMap) ForEach(fn func(key KT, val VT) bool) bool {
 	keysP := cm.keysPool.Get().(*[]KT)
 	defer cm.keysPool.Put(keysP)
 
 	for _, lm := range cm.shards {
 		keys := (*keysP)[:0]
-		if err := lm.ForEach(keys, fn); err != nil {
-			if err == Break {
-				return nil
-			}
-			return err
+		if !lm.ForEach(keys, fn) {
+			return false
 		}
 	}
 
-	return nil
+	return false
 }
 
 // ForEachLocked loops over all the key/values in the map.
-// You can break early by returning an error or Break.
+// You can break early by returning false.
 // It is **NOT* safe to modify the map while using this iterator.
-func (cm *CMap) ForEachLocked(fn func(key KT, val VT) error) error {
+func (cm *CMap) ForEachLocked(fn func(key KT, val VT) bool) bool {
 	for _, lm := range cm.shards {
-		if err := lm.ForEachLocked(fn); err != nil {
-			if err == Break {
-				return nil
-			}
-			return err
+		if !lm.ForEachLocked(fn) {
+			return false
 		}
 	}
 
-	return nil
+	return true
 }
 
 // Len returns the length of the map.
@@ -168,7 +158,7 @@ func (cm *CMap) Len() int {
 	return ln
 }
 
-// KV hols the key/value returned when Iter is called.
+// KV holds the key/value returned when Iter is called.
 type KV struct {
 	Key   KT
 	Value VT
@@ -198,19 +188,21 @@ func (cm *CMap) IterLocked(ctx context.Context, buffer int) <-chan *KV {
 	return ch
 }
 
+// iterContext is used internally
 func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
-	fn := func(k KT, v VT) error {
+	fn := func(k KT, v VT) bool {
 		select {
 		case <-ctx.Done():
-			return Break
+			return false
 		case ch <- &KV{k, v}:
-			return nil
+			return true
 		}
 	}
+
 	if locked {
-		cm.ForEachLocked(fn)
+		_ = cm.ForEachLocked(fn)
 	} else {
-		cm.ForEach(fn)
+		_ = cm.ForEach(fn)
 	}
 }
 

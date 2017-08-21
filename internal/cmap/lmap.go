@@ -14,7 +14,7 @@ func NewLMap() *LMap {
 	return NewLMapSize(0)
 }
 
-// NewLMap is the equivalent of `m := make(map[KT]VT, cap)`
+// NewLMapSize is the equivalent of `m := make(map[KT]VT, cap)`
 func NewLMapSize(cap int) *LMap {
 	return &LMap{
 		m: make(map[KT]VT, cap),
@@ -98,9 +98,9 @@ func (lm *LMap) Swap(key KT, newV VT) (oldV VT) {
 }
 
 // ForEach loops over all the key/values in the map.
-// You can break early by returning an error or Break.
+// You can break early by returning an error .
 // It **is** safe to modify the map while using this iterator, however it uses more memory and is slightly slower.
-func (lm *LMap) ForEach(keys []KT, fn func(key KT, val VT) error) (err error) {
+func (lm *LMap) ForEach(keys []KT, fn func(key KT, val VT) bool) bool {
 	lm.l.RLock()
 	for key := range lm.m {
 		keys = append(keys, key)
@@ -114,28 +114,28 @@ func (lm *LMap) ForEach(keys []KT, fn func(key KT, val VT) error) (err error) {
 		if !ok {
 			continue
 		}
-		if err = fn(key, val); err != nil {
-			return
+		if !fn(key, val) {
+			return false
 		}
 	}
 
-	return
+	return true
 }
 
 // ForEachLocked loops over all the key/values in the map.
-// You can break early by returning an error or Break.
+// You can break early by returning false
 // It is **NOT* safe to modify the map while using this iterator.
-func (lm *LMap) ForEachLocked(fn func(key KT, val VT) error) (err error) {
+func (lm *LMap) ForEachLocked(fn func(key KT, val VT) bool) bool {
 	lm.l.RLock()
 	defer lm.l.RUnlock()
 
 	for key, val := range lm.m {
-		if err = fn(key, val); err != nil {
-			return
+		if !fn(key, val) {
+			return false
 		}
 	}
 
-	return
+	return true
 }
 
 // Len returns the length of the map.
