@@ -48,29 +48,29 @@ func main() {
 
 ## Benchmark
 ```bash
-➤ go version; go test -tags streamrail -short -bench=. -benchmem ./ ./stringcmap/ | benchstat /dev/stdin
+➤ go version; go test -tags streamrail -short -bench=. -benchmem -count 5 ./ ./stringcmap/ | benchstat /dev/stdin
 go version devel +ff90f4af66 2017-08-19 12:56:24 +0000 linux/amd64
 
 name               time/op
 # pkg:github.com/OneOfOne/cmap goos:linux goarch:amd64
-CMap/2048-8        90.4ns ± 0%
-CMap/4096-8        96.4ns ± 0%
-CMap/8192-8         120ns ± 0%
+CMap/2048-8        85.3ns ± 2%
+CMap/4096-8        86.5ns ± 1%
+CMap/8192-8        95.0ns ±16%
 
 # simple map[interface{}]interface{} wrapped with a sync.RWMutex
-MutexMap-8          338ns ± 0%
+MutexMap-8          486ns ± 9%
 
 # sync.Map
-SyncMap-8           152ns ± 0%
+SyncMap-8           511ns ±28%
 
 # pkg:github.com/OneOfOne/cmap/stringcmap goos:linux goarch:amd64
-StringCMap/2048-8  41.0ns ± 0%
-StringCMap/4096-8  42.8ns ± 0%
-StringCMap/8192-8  42.4ns ± 0%
+StringCMap/2048-8  38.3ns ± 3%
+StringCMap/4096-8  37.9ns ± 5%
+StringCMap/8192-8  38.5ns ±17%
 
-Streamrail/2048-8  53.5ns ± 0%
-Streamrail/4096-8  51.4ns ± 0%
-Streamrail/8192-8  51.8ns ± 0%
+Streamrail/2048-8  47.2ns ± 1%
+Streamrail/4096-8  46.6ns ± 1%
+Streamrail/8192-8  46.7ns ± 2%
 
 name               alloc/op
 # pkg:github.com/OneOfOne/cmap goos:linux goarch:amd64
@@ -78,9 +78,9 @@ CMap/2048-8         48.0B ± 0%
 CMap/4096-8         48.0B ± 0%
 CMap/8192-8         48.0B ± 0%
 
-MutexMap-8          34.0B ± 0%
+MutexMap-8          35.0B ± 0%
 
-SyncMap-8           50.0B ± 0%
+SyncMap-8           63.4B ± 7%
 
 # pkg:github.com/OneOfOne/cmap/stringcmap goos:linux goarch:amd64
 
