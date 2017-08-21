@@ -2,31 +2,35 @@ package cmap
 
 import "sync"
 
-type lmap struct {
+type LockedMap struct {
 	m map[KT]VT
 	l *sync.RWMutex
 }
 
-func newLmap(cap int) *lmap {
-	return &lmap{
+func NewLockedMap() *LockedMap {
+	return NewLockedMapSize(0)
+}
+
+func NewLockedMapSize(cap int) *LockedMap {
+	return &LockedMap{
 		m: make(map[KT]VT, cap),
 		l: new(sync.RWMutex),
 	}
 }
 
-func (lm lmap) Set(key KT, v VT) {
+func (lm LockedMap) Set(key KT, v VT) {
 	lm.l.Lock()
 	lm.m[key] = v
 	lm.l.Unlock()
 }
 
-func (lm lmap) Update(key KT, fn func(oldVal VT) (newVal VT)) {
+func (lm LockedMap) Update(key KT, fn func(oldVal VT) (newVal VT)) {
 	lm.l.Lock()
 	lm.m[key] = fn(lm.m[key])
 	lm.l.Unlock()
 }
 
-func (lm lmap) Swap(key KT, newV VT) (oldV VT) {
+func (lm LockedMap) Swap(key KT, newV VT) (oldV VT) {
 	lm.l.Lock()
 	oldV = lm.m[key]
 	lm.m[key] = newV
@@ -34,33 +38,33 @@ func (lm lmap) Swap(key KT, newV VT) (oldV VT) {
 	return
 }
 
-func (lm lmap) Get(key KT) (v VT) {
+func (lm LockedMap) Get(key KT) (v VT) {
 	lm.l.RLock()
 	v = lm.m[key]
 	lm.l.RUnlock()
 	return
 }
-func (lm lmap) GetOK(key KT) (v VT, ok bool) {
+func (lm LockedMap) GetOK(key KT) (v VT, ok bool) {
 	lm.l.RLock()
 	v, ok = lm.m[key]
 	lm.l.RUnlock()
 	return
 }
 
-func (lm lmap) Has(key KT) (ok bool) {
+func (lm LockedMap) Has(key KT) (ok bool) {
 	lm.l.RLock()
 	_, ok = lm.m[key]
 	lm.l.RUnlock()
 	return
 }
 
-func (lm lmap) Delete(key KT) {
+func (lm LockedMap) Delete(key KT) {
 	lm.l.Lock()
 	delete(lm.m, key)
 	lm.l.Unlock()
 }
 
-func (lm lmap) DeleteAndGet(key KT) (v VT) {
+func (lm LockedMap) DeleteAndGet(key KT) (v VT) {
 	lm.l.Lock()
 	v = lm.m[key]
 	delete(lm.m, key)
@@ -68,14 +72,14 @@ func (lm lmap) DeleteAndGet(key KT) (v VT) {
 	return v
 }
 
-func (lm lmap) Len() (ln int) {
+func (lm LockedMap) Len() (ln int) {
 	lm.l.RLock()
 	ln = len(lm.m)
 	lm.l.RUnlock()
 	return
 }
 
-func (lm lmap) ForEach(keys []KT, fn func(key KT, val VT) error) (err error) {
+func (lm LockedMap) ForEach(keys []KT, fn func(key KT, val VT) error) (err error) {
 	lm.l.RLock()
 	for key := range lm.m {
 		keys = append(keys, key)
@@ -97,7 +101,7 @@ func (lm lmap) ForEach(keys []KT, fn func(key KT, val VT) error) (err error) {
 	return
 }
 
-func (lm lmap) ForEachLocked(fn func(key KT, val VT) error) (err error) {
+func (lm LockedMap) ForEachLocked(fn func(key KT, val VT) error) (err error) {
 	lm.l.RLock()
 	defer lm.l.RUnlock()
 
