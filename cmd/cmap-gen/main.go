@@ -26,6 +26,7 @@ var (
 	valueType = flag.String("vt", "interface{}", "value type")
 	hashFn    = flag.String("hfn", "cmap.DefaultKeyHasher", "hash func")
 	pkgPath   = flag.String("p", "", "package path")
+	lmapOnly  = flag.Bool("lmap", false, "generate LMap only")
 
 	toStdout = flag.Bool("stdout", false, "write the output to stdout rather than creating a package")
 
@@ -47,8 +48,13 @@ func main() {
 	}
 
 	if *pkgName == "" {
-		wd, _ := os.Getwd()
-		*pkgName = filepath.Base(wd)
+		if *pkgPath != "" {
+			*pkgName = filepath.Base(*pkgPath)
+		} else {
+			wd, _ := os.Getwd()
+			*pkgName = filepath.Base(wd)
+
+		}
 	}
 
 	if !validPackageName.MatchString(*pkgName) {
@@ -65,7 +71,12 @@ func main() {
 		}
 	}
 
-	r, closeReaders := multiFileReader(filepath.Join(cmapBase, "cmap.go"), filepath.Join(cmapBase, "lmap.go"))
+	files := []string{filepath.Join(cmapBase, "cmap.go"), filepath.Join(cmapBase, "lmap.go")}
+	if *lmapOnly {
+		files = files[1:]
+	}
+
+	r, closeReaders := multiFileReader(files...)
 	var (
 		filters = getLineFilters()
 		buf     bytes.Buffer
@@ -100,7 +111,12 @@ package %s
 		log.Fatalf("error compiling code: \n\t%s\n\n%s", strings.Join(errs, "\n\t"), src)
 	}
 
-	fp := filepath.Join(*pkgPath, "cmap.go")
+	var fp string
+	if *lmapOnly {
+		fp = filepath.Join(*pkgPath, "lmap.go")
+	} else {
+		fp = filepath.Join(*pkgPath, "cmap.go")
+	}
 
 	if *verbose {
 		log.Printf("writing typed cmap %s.CMap[%s][%s] (using HashFn: %s) to file %s...", *pkgName, *keyType, *valueType, *hashFn, fp)
