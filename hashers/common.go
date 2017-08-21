@@ -28,7 +28,7 @@ func TypeHasher32(v interface{}) uint32 {
 	case int64:
 		return MixHash32(uint32(v))
 	case uint32:
-		return MixHash32(uint32(v))
+		return MixHash32(v)
 	case int32:
 		return MixHash32(uint32(v))
 	case uint16:
@@ -42,7 +42,7 @@ func TypeHasher32(v interface{}) uint32 {
 	case float64:
 		return MixHash32(uint32(math.Float64bits(v)))
 	case float32:
-		return MixHash32(uint32(math.Float32bits(v)))
+		return MixHash32(math.Float32bits(v))
 	case fmt.Stringer:
 		return Fnv32(v.String())
 	default:

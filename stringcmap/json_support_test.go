@@ -49,7 +49,7 @@ func TestJSONType(t *testing.T) {
 	var mwj MapWithJSON
 	mwj.UnmarshalValueFn = func(j json.RawMessage) (interface{}, error) {
 		var u uint64
-		err := json.Unmarshal(j, &u)
+		err = json.Unmarshal(j, &u)
 		return u, err
 	}
 

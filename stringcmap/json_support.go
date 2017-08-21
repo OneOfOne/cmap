@@ -25,7 +25,7 @@ type MapWithJSON struct {
 }
 
 // WriteTo implements io.WriterTo, outputs the map as a json object.
-func (mjw *MapWithJSON) WriteTo(w io.Writer) (n int64, err error) {
+func (mwj *MapWithJSON) WriteTo(w io.Writer) (n int64, err error) {
 	var buf writerWithBytes
 	switch w := w.(type) {
 	case writerWithBytes:
@@ -34,27 +34,30 @@ func (mjw *MapWithJSON) WriteTo(w io.Writer) (n int64, err error) {
 		buf = bufio.NewWriter(w)
 	}
 
-	buf.WriteByte('{')
+	_ = buf.WriteByte('{')
 
-	if err := mjw.ForEach(func(key string, val interface{}) error {
-		vj, err := json.Marshal(val)
-		if err != nil {
-			return err
+	mwj.ForEach(func(key string, val interface{}) bool {
+		var vj []byte
+		if vj, err = json.Marshal(val); err != nil {
+			return false
 		}
 		if n > 0 {
-			buf.WriteByte(',')
+			_ = buf.WriteByte(',')
 		}
 		kj, _ := json.Marshal(key)
 		kn, _ := buf.Write(kj)
-		buf.WriteByte(':')
+		_ = buf.WriteByte(':')
 		vn, _ := buf.Write(vj)
 		n += int64(kn + vn + 1)
-		return nil
-	}); err != nil {
-		return 0, err
+		return true
+	})
+
+	if err != nil {
+		n = 0
+		return
 	}
 
-	buf.WriteByte('}')
+	_ = buf.WriteByte('}')
 	n += 2 // {}
 
 	if buf, ok := buf.(flusher); ok {
