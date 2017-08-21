@@ -1,11 +1,10 @@
-//go:generate /bin/env IS_MAIN_PACKAGE=1 /bin/sh ./scripts/cmap-gen.sh cmap "interface{}" "interface{}" "" ./
-//go:generate /bin/sh ./scripts/cmap-gen.sh stringcmap "string" "interface{}" "hashers.Fnv32" ./stringcmap
+//go:generate go run ./cmd/cmap-gen/main.go -v -internal -n cmap -p ./
+//go:generate go run ./cmd/cmap-gen/main.go -v -n stringcmap -kt string -hfn hashers.Fnv32
+//go:generate gometalinter ./ ./stringcmap
 
 package cmap
 
 import (
-	"errors"
-
 	"github.com/OneOfOne/cmap/hashers"
 )
 
@@ -13,7 +12,5 @@ import (
 // The default is 256
 var DefaultShardCount = 1 << 8
 
-// Break is returned to break early from ForEach without returning an error.
-var Break = errors.New("break")
-
+// DefaultKeyHasher is an alias for hashers.TypeHasher32(key)
 func DefaultKeyHasher(key interface{}) uint32 { return hashers.TypeHasher32(key) }
