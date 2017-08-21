@@ -1,7 +1,5 @@
 package hashers
 
-import "hash/fnv"
-
 // Fnv32 returns a 32-bit FNV-1 hash of a string.
 func Fnv32(s string) (hash uint32) {
 	const prime32 = 16777619
@@ -18,7 +16,7 @@ L:
 	if i++; i < len(s) {
 		goto L
 	}
-	fnv.New64()
+
 	return
 }
 

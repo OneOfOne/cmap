@@ -1,5 +1,5 @@
-//go:generate env IS_MAIN_PACKAGE=1 /bin/sh ./scripts/mapSpec.sh cmap "interface{}" "interface{}" "" ./
-//go:generate /bin/sh ./scripts/mapSpec.sh stringcmap "string" "interface{}" "hashers.Fnv32" ./stringcmap
+//go:generate /bin/env IS_MAIN_PACKAGE=1 /bin/sh ./scripts/cmap-gen.sh cmap "interface{}" "interface{}" "" ./
+//go:generate /bin/sh ./scripts/cmap-gen.sh stringcmap "string" "interface{}" "hashers.Fnv32" ./stringcmap
 
 package cmap
 

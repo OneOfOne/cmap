@@ -16,7 +16,7 @@ die() {
 
 [ -z "$cmapBase" ] && die "couldn't find github.com/OneOfOne/cmap/internal/cmap"
 [ -z "$name" -o -z "$kt" ] && die "usage: $0 package-name key-type [value-type|interface{}] [hash-func|cmap.DefaultKeyHasher] [path]"
-[ -z "$IS_MAIN_PACKAGE" ] || stripPkg="s/cmap\.//g; s/^var Break.*//g;"
+[ -z "$IS_MAIN_PACKAGE" ] || stripPkg="s/cmap\.//g; s/.*Break =.*//g;"
 [ "$hfn" != "cmap.DefaultKeyHasher" ] && stripHash="s/.*[^.]HashFn[ :].*|.*DefaultKeyHasher.*//g; s/cm\.HashFn/$hfn/g;"
 
 echo generating $name $kt $vt $hfn $path

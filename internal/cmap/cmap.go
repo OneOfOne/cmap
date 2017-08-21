@@ -7,23 +7,17 @@ import (
 	"github.com/OneOfOne/cmap"
 )
 
-var Break = cmap.Break
-
-type KV struct {
-	Key   KT
-	Value VT
-}
+var (
+	Break = cmap.Break
+)
 
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
-	shards []*LockedMap
-
+	shards   []*LMap
+	keysPool sync.Pool
 	// HashFn allows using a custom hash function that's used to determain the key's shard.
 	// Defaults to DefaultKeyHasher.
 	HashFn func(KT) uint32
-
-	keysPool sync.Pool
-	mod      uint32
 }
 
 // New is an alias for NewSize(DefaultShardCount)
@@ -41,106 +35,111 @@ func NewSize(shardCount int) *CMap {
 	}
 
 	cm := &CMap{
-		shards: make([]*LockedMap, shardCount),
-		mod:    uint32(shardCount) - 1,
+		shards: make([]*LMap, shardCount),
 		HashFn: DefaultKeyHasher,
 	}
 
-	for i := range cm.shards {
-		cm.shards[i] = NewLockedMapSize(shardCount)
-	}
-
 	cm.keysPool.New = func() interface{} {
-		out := make([]KT, 0, shardCount) // good starting round
+		out := make([]KT, 0, cmap.DefaultShardCount) // good starting round
 
 		return &out // return a ptr to avoid extra allocation on Get/Put
+	}
+
+	for i := range cm.shards {
+		cm.shards[i] = NewLMapSize(shardCount)
 	}
 
 	return cm
 }
 
-func (cm *CMap) shard(key KT) *LockedMap {
+// ShardForKey returns the LMap that may hold the specific key.
+func (cm *CMap) ShardForKey(key KT) *LMap {
 	h := cm.HashFn(key)
-	return cm.shards[h&cm.mod]
-}
-
-// Get is the equivalent of `val := map[key]`.
-func (cm *CMap) Get(key KT) (val VT) {
-	return cm.shard(key).Get(key)
-}
-
-// GetOK is the equivalent of `val, ok := map[key]`.
-func (cm *CMap) GetOK(key KT) (val VT, ok bool) {
-	return cm.shard(key).GetOK(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)]
 }
 
 // Set is the equivalent of `map[key] = val`.
 func (cm *CMap) Set(key KT, val VT) {
-	cm.shard(key).Set(key, val)
+	h := cm.HashFn(key)
+	cm.shards[h&uint32(len(cm.shards)-1)].Set(key, val)
 }
 
 // SetIfNotExists will only assign val to key if it wasn't already set.
 // Use `CMap.Update` if you need more logic.
 func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
-	sh := cm.shard(key)
-	sh.l.Lock()
-	if _, ok := sh.m[key]; !ok {
-		sh.m[key], set = val, true
-	}
-	sh.l.Unlock()
-	return
+	h := cm.HashFn(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)].SetIfNotExists(key, val)
+}
+
+// Get is the equivalent of `val := map[key]`.
+func (cm *CMap) Get(key KT) (val VT) {
+	h := cm.HashFn(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)].Get(key)
+}
+
+// GetOK is the equivalent of `val, ok := map[key]`.
+func (cm *CMap) GetOK(key KT) (val VT, ok bool) {
+	h := cm.HashFn(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)].GetOK(key)
 }
 
 // Has is the equivalent of `_, ok := map[key]`.
-func (cm *CMap) Has(key KT) bool { return cm.shard(key).Has(key) }
+func (cm *CMap) Has(key KT) bool {
+	h := cm.HashFn(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)].Has(key)
+}
 
 // Delete is the equivalent of `delete(map, key)`.
-func (cm *CMap) Delete(key KT) { cm.shard(key).Delete(key) }
+func (cm *CMap) Delete(key KT) {
+	h := cm.HashFn(key)
+	cm.shards[h&uint32(len(cm.shards)-1)].Delete(key)
+}
 
 // DeleteAndGet is the equivalent of `oldVal := map[key]; delete(map, key)`.
-func (cm *CMap) DeleteAndGet(key KT) VT { return cm.shard(key).DeleteAndGet(key) }
+func (cm *CMap) DeleteAndGet(key KT) VT {
+	h := cm.HashFn(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)].DeleteAndGet(key)
+}
 
-// Update calls `fn` with the key's old value (or nil if it didn't exist) and assign the returned value to the key.
+// Update calls `fn` with the key's old value (or nil) and assign the returned value to the key.
 // The shard containing the key will be locked, it is NOT safe to call other cmap funcs inside `fn`.
 func (cm *CMap) Update(key KT, fn func(oldval VT) (newval VT)) {
-	cm.shard(key).Update(key, fn)
+	h := cm.HashFn(key)
+	cm.shards[h&uint32(len(cm.shards)-1)].Update(key, fn)
 }
 
 // Swap is the equivalent of `oldVal, map[key] = map[key], newVal`.
 func (cm *CMap) Swap(key KT, val VT) VT {
-	return cm.shard(key).Swap(key, val)
+	h := cm.HashFn(key)
+	return cm.shards[h&uint32(len(cm.shards)-1)].Swap(key, val)
 }
 
 // Keys returns a slice of all the keys of the map.
 func (cm *CMap) Keys() []KT {
 	out := make([]KT, 0, cm.Len())
-	for i := range cm.shards {
-		sh := cm.shards[i]
-		sh.l.RLock()
-		for k := range sh.m {
-			out = append(out, k)
-		}
-		sh.l.RUnlock()
+	for _, sh := range cm.shards {
+		out = sh.Keys(out)
 	}
 	return out
 }
 
-// ForEach loops over all the key/values in all the shards in order.
+// ForEach loops over all the key/values in the map.
 // You can break early by returning an error or Break.
 // It **is** safe to modify the map while using this iterator, however it uses more memory and is slightly slower.
 func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
 	keysP := cm.keysPool.Get().(*[]KT)
-
 	defer cm.keysPool.Put(keysP)
-	for i := range cm.shards {
+
+	for _, lm := range cm.shards {
 		keys := (*keysP)[:0]
-		if err := cm.shards[i].ForEach(keys, fn); err != nil {
+		if err := lm.ForEach(keys, fn); err != nil {
 			if err == Break {
 				return nil
 			}
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -148,15 +147,31 @@ func (cm *CMap) ForEach(fn func(key KT, val VT) error) error {
 // You can break early by returning an error or Break.
 // It is **NOT* safe to modify the map while using this iterator.
 func (cm *CMap) ForEachLocked(fn func(key KT, val VT) error) error {
-	for i := range cm.shards {
-		if err := cm.shards[i].ForEachLocked(fn); err != nil {
+	for _, lm := range cm.shards {
+		if err := lm.ForEachLocked(fn); err != nil {
 			if err == Break {
 				return nil
 			}
 			return err
 		}
 	}
+
 	return nil
+}
+
+// Len returns the length of the map.
+func (cm *CMap) Len() int {
+	ln := 0
+	for _, lm := range cm.shards {
+		ln += lm.Len()
+	}
+	return ln
+}
+
+// KV hols the key/value returned when Iter is called.
+type KV struct {
+	Key   KT
+	Value VT
 }
 
 // Iter returns a channel to be used in for range.
@@ -197,15 +212,6 @@ func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
 	} else {
 		cm.ForEach(fn)
 	}
-}
-
-// Len returns the number of elements in the map.
-func (cm *CMap) Len() int {
-	ln := 0
-	for i := range cm.shards {
-		ln += cm.shards[i].Len()
-	}
-	return ln
 }
 
 // NumShards returns the number of shards in the map.
