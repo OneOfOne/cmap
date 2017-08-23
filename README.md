@@ -1,5 +1,5 @@
 # cmap [![GoDoc](https://godoc.org/github.com/OneOfOne/cmap?status.svg)](https://godoc.org/github.com/OneOfOne/cmap) [![Build Status](https://travis-ci.org/OneOfOne/cmap.svg?branch=master)](https://travis-ci.org/OneOfOne/cmap) [![Coverage](https://gocover.io/_badge/github.com/OneOfOne/cmap)](https://gocover.io/github.com/OneOfOne/cmap)
---
+
 
 CMap (concurrent-map) is a sharded map implementation to support fast concurrent access.
 

@@ -4,20 +4,27 @@ import (
 	"context"
 	"sync"
 
-	"github.com/OneOfOne/cmap"
+	"github.com/OneOfOne/cmap/hashers"
 )
+
+type (
+	KT interface{} // nolint
+	VT interface{} // nolint
+)
+
+// DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called. The default is 256.
+const DefaultShardCount = 1 << 8
 
 // CMap is a concurrent safe sharded map to scale on multiple cores.
 type CMap struct {
 	shards   []*LMap
 	keysPool sync.Pool
-	// HashFn allows using a custom hash function that's used to determain the key's shard.
-	// Defaults to DefaultKeyHasher.
+	// HashFn allows using a custom hash function that's used to determain the key's shard. Defaults to DefaultKeyHasher.
 	HashFn func(KT) uint32
 }
 
 // New is an alias for NewSize(DefaultShardCount)
-func New() *CMap { return NewSize(cmap.DefaultShardCount) }
+func New() *CMap { return NewSize(DefaultShardCount) }
 
 // NewSize returns a CMap with the specific shardSize, note that for performance reasons,
 // shardCount must be a power of 2.
@@ -25,7 +32,7 @@ func New() *CMap { return NewSize(cmap.DefaultShardCount) }
 func NewSize(shardCount int) *CMap {
 	// must be a power of 2
 	if shardCount < 1 {
-		shardCount = cmap.DefaultShardCount
+		shardCount = DefaultShardCount
 	} else if shardCount&(shardCount-1) != 0 {
 		panic("shardCount must be a power of 2")
 	}
@@ -36,7 +43,7 @@ func NewSize(shardCount int) *CMap {
 	}
 
 	cm.keysPool.New = func() interface{} {
-		out := make([]KT, 0, cmap.DefaultShardCount) // good starting round
+		out := make([]KT, 0, DefaultShardCount) // good starting round
 
 		return &out // return a ptr to avoid extra allocation on Get/Put
 	}
@@ -61,7 +68,7 @@ func (cm *CMap) Set(key KT, val VT) {
 }
 
 // SetIfNotExists will only assign val to key if it wasn't already set.
-// Use `CMap.Update` if you need more logic.
+// Use `Update` if you need more logic.
 func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
 	h := cm.HashFn(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].SetIfNotExists(key, val)
@@ -208,3 +215,6 @@ func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
 
 // NumShards returns the number of shards in the map.
 func (cm *CMap) NumShards() int { return len(cm.shards) }
+
+// DefaultKeyHasher is an alias for hashers.TypeHasher32(key).
+func DefaultKeyHasher(key KT) uint32 { return hashers.TypeHasher32(key) }

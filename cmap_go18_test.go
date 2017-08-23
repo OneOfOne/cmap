@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 	"testing"
 
 	"github.com/OneOfOne/cmap"
 )
 
-var keys [1e5]string
+var keys [1e5]interface{}
 
 func init() {
 	for i := range keys {
@@ -63,26 +62,8 @@ func BenchmarkCMap(b *testing.B) {
 	}
 }
 
-type mutexMap struct {
-	sync.RWMutex
-	m map[interface{}]interface{}
-}
-
-func (mm *mutexMap) Set(k interface{}, v interface{}) {
-	mm.Lock()
-	mm.m[k] = v
-	mm.Unlock()
-}
-
-func (mm *mutexMap) Get(k interface{}) interface{} {
-	mm.RLock()
-	v := mm.m[k]
-	mm.RUnlock()
-	return v
-}
-
-func BenchmarkMutexMap(b *testing.B) {
-	cm := mutexMap{m: make(map[interface{}]interface{}, cmap.DefaultShardCount)}
+func BenchmarkLMap(b *testing.B) {
+	cm := cmap.NewLMapSize(cmap.DefaultShardCount)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		var i int
@@ -96,6 +77,6 @@ func BenchmarkMutexMap(b *testing.B) {
 		}
 	})
 	if testing.Verbose() {
-		b.Logf("size: %v", len(cm.m))
+		b.Logf("size: %v", cm.Len())
 	}
 }

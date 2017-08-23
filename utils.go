@@ -1,17 +1,6 @@
-//go:generate go install ./cmd/cmap-gen
-//go:generate cmap-gen -v -internal -n cmap -p ./
-//go:generate cmap-gen -v -n stringcmap -kt string -hfn hashers.Fnv32
-//go:generate gometalinter ./ ./stringcmap
+//go:generate go install github.com/OneOfOne/genx/...
+//go:generate genx -pkg ./internal/cmap -t KT=interface{} -t VT=interface{} -m -o ./cmap.go
+//go:generate genx -pkg ./internal/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
+//go:generate gometalinter --vendored-linters --aggregate --cyclo-over=17 ./...
 
 package cmap
-
-import (
-	"github.com/OneOfOne/cmap/hashers"
-)
-
-// DefaultShardCount is the default number of shards to use when New() or NewFromJSON() are called.
-// The default is 256
-var DefaultShardCount = 1 << 8
-
-// DefaultKeyHasher is an alias for hashers.TypeHasher32(key)
-func DefaultKeyHasher(key interface{}) uint32 { return hashers.TypeHasher32(key) }
