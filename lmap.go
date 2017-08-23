@@ -1,3 +1,5 @@
+// +build genx
+
 package cmap
 
 import "sync"

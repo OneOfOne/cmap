@@ -1,6 +1,6 @@
 //go:generate go install github.com/OneOfOne/genx/...
-//go:generate genx -pkg ./internal/cmap -t KT=interface{} -t VT=interface{} -m -o ./cmap.go
-//go:generate genx -pkg ./internal/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
+//go:generate genx -pkg github.com/OneOfOne/cmap -t KT=interface{} -t VT=interface{} -m -o ./cmap_genx.go
+//go:generate genx -pkg github.com/OneOfOne/cmap -n stringcmap -t KT=string -t VT=interface{} -fld HashFn -fn DefaultKeyHasher -s "cm.HashFn=hashers.Fnv32" -m -o ./stringcmap/cmap.go
 //go:generate gometalinter --vendored-linters --aggregate --cyclo-over=17 ./...
 
 package cmap
