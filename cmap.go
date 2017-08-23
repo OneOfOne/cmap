@@ -5,8 +5,6 @@ package cmap
 import (
 	"context"
 	"sync"
-
-	"github.com/OneOfOne/cmap/hashers"
 )
 
 type (
@@ -21,8 +19,6 @@ const DefaultShardCount = 1 << 8
 type CMap struct {
 	shards   []*LMap
 	keysPool sync.Pool
-	// HashFn allows using a custom hash function that's used to determain the key's shard. Defaults to DefaultKeyHasher.
-	HashFn func(KT) uint32
 }
 
 // New is an alias for NewSize(DefaultShardCount)
@@ -41,7 +37,6 @@ func NewSize(shardCount int) *CMap {
 
 	cm := &CMap{
 		shards: make([]*LMap, shardCount),
-		HashFn: DefaultKeyHasher,
 	}
 
 	cm.keysPool.New = func() interface{} {
@@ -59,63 +54,63 @@ func NewSize(shardCount int) *CMap {
 
 // ShardForKey returns the LMap that may hold the specific key.
 func (cm *CMap) ShardForKey(key KT) *LMap {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)]
 }
 
 // Set is the equivalent of `map[key] = val`.
 func (cm *CMap) Set(key KT, val VT) {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	cm.shards[h&uint32(len(cm.shards)-1)].Set(key, val)
 }
 
 // SetIfNotExists will only assign val to key if it wasn't already set.
 // Use `Update` if you need more logic.
 func (cm *CMap) SetIfNotExists(key KT, val VT) (set bool) {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].SetIfNotExists(key, val)
 }
 
 // Get is the equivalent of `val := map[key]`.
 func (cm *CMap) Get(key KT) (val VT) {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].Get(key)
 }
 
 // GetOK is the equivalent of `val, ok := map[key]`.
 func (cm *CMap) GetOK(key KT) (val VT, ok bool) {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].GetOK(key)
 }
 
 // Has is the equivalent of `_, ok := map[key]`.
 func (cm *CMap) Has(key KT) bool {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].Has(key)
 }
 
 // Delete is the equivalent of `delete(map, key)`.
 func (cm *CMap) Delete(key KT) {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	cm.shards[h&uint32(len(cm.shards)-1)].Delete(key)
 }
 
 // DeleteAndGet is the equivalent of `oldVal := map[key]; delete(map, key)`.
 func (cm *CMap) DeleteAndGet(key KT) VT {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].DeleteAndGet(key)
 }
 
 // Update calls `fn` with the key's old value (or nil) and assign the returned value to the key.
 // The shard containing the key will be locked, it is NOT safe to call other cmap funcs inside `fn`.
 func (cm *CMap) Update(key KT, fn func(oldval VT) (newval VT)) {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	cm.shards[h&uint32(len(cm.shards)-1)].Update(key, fn)
 }
 
 // Swap is the equivalent of `oldVal, map[key] = map[key], newVal`.
 func (cm *CMap) Swap(key KT, val VT) VT {
-	h := cm.HashFn(key)
+	h := hasher(key)
 	return cm.shards[h&uint32(len(cm.shards)-1)].Swap(key, val)
 }
 
@@ -165,6 +160,19 @@ func (cm *CMap) Len() int {
 		ln += lm.Len()
 	}
 	return ln
+}
+
+// ShardDistribution returns the distribution of data amoung all shards.
+// Useful for debugging the efficiency of a hash.
+func (cm *CMap) ShardDistribution() []float64 {
+	var (
+		out = make([]float64, len(cm.shards))
+		ln  = float64(cm.Len())
+	)
+	for i := range out {
+		out[i] = float64(cm.shards[i].Len()) / ln
+	}
+	return out
 }
 
 // KV holds the key/value returned when Iter is called.
@@ -217,6 +225,3 @@ func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
 
 // NumShards returns the number of shards in the map.
 func (cm *CMap) NumShards() int { return len(cm.shards) }
-
-// DefaultKeyHasher is an alias for hashers.TypeHasher32(key).
-func DefaultKeyHasher(key KT) uint32 { return hashers.TypeHasher32(key) }

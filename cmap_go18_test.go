@@ -17,6 +17,16 @@ func init() {
 	}
 }
 
+func TestDistruption(t *testing.T) {
+	cm := cmap.NewSize(32)
+	for i := 0; i < 1e6; i++ {
+		cm.Set(i, i)
+	}
+
+	t.Logf("%+v", cm.ShardDistribution())
+
+}
+
 func TestIter(t *testing.T) {
 	cm := cmap.New()
 	for i := 0; i < 100; i++ {
