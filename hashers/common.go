@@ -3,6 +3,7 @@ package hashers
 import (
 	"fmt"
 	"math"
+	"reflect"
 )
 
 // KeyHasher is a type that provides its own hash function.
@@ -13,6 +14,7 @@ type KeyHasher interface {
 // TypeHasher32 returns a hash for the specific key for internal sharding.
 // By default, those types are supported as keys: KeyHasher, string, uint64, int64, uint32, int32, uint16, int16, uint8,
 // int8, uint, int, float64, float32 and fmt.Stringer.
+// Falls back to Fnv32(reflect.ValueOf(v).String()).
 func TypeHasher32(v interface{}) uint32 {
 	switch v := v.(type) {
 	case KeyHasher:
@@ -46,13 +48,14 @@ func TypeHasher32(v interface{}) uint32 {
 	case fmt.Stringer:
 		return Fnv32(v.String())
 	default:
-		panic(fmt.Sprintf("unsupported type: %T (%v)", v, v))
+		return Fnv32(reflect.ValueOf(v).String())
 	}
 }
 
 // TypeHasher64 returns a hash for the specific key for internal sharding.
 // By default, those types are supported as keys: KeyHasher, string, uint64, int64, uint32, int32, uint16, int16, uint8,
 // int8, uint, int, float64, float32 and fmt.Stringer.
+// Falls back to Fnv64(reflect.ValueOf(v).String()).
 func TypeHasher64(v interface{}) uint64 {
 	switch v := v.(type) {
 	case KeyHasher:
@@ -86,7 +89,7 @@ func TypeHasher64(v interface{}) uint64 {
 	case fmt.Stringer:
 		return Fnv64(v.String())
 	default:
-		panic(fmt.Sprintf("unsupported type: %T (%v)", v, v))
+		return Fnv64(reflect.ValueOf(v).String())
 	}
 }
 
