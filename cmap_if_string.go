@@ -5,4 +5,4 @@ package cmap
 
 import "github.com/OneOfOne/cmap/hashers"
 
-func hasher(key KT) uint32 { return hashers.TypeHasher32(key) }
+func hasher(key KT) uint32 { return hashers.Fnv32(key) }

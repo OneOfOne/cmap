@@ -18,33 +18,33 @@ type KeyHasher interface {
 func TypeHasher32(v interface{}) uint32 {
 	switch v := v.(type) {
 	case KeyHasher:
-		return MixHash32(uint32(v.Hash()))
+		return Mix32(uint32(v.Hash()))
 	case string:
 		return Fnv32(v)
 	case int:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case uint:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case uint64:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case int64:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case uint32:
-		return MixHash32(v)
+		return Mix32(v)
 	case int32:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case uint16:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case int16:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case uint8:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case int8:
-		return MixHash32(uint32(v))
+		return Mix32(uint32(v))
 	case float64:
-		return MixHash32(uint32(math.Float64bits(v)))
+		return Mix32(uint32(math.Float64bits(v)))
 	case float32:
-		return MixHash32(math.Float32bits(v))
+		return Mix32(math.Float32bits(v))
 	case fmt.Stringer:
 		return Fnv32(v.String())
 	default:
@@ -59,33 +59,33 @@ func TypeHasher32(v interface{}) uint32 {
 func TypeHasher64(v interface{}) uint64 {
 	switch v := v.(type) {
 	case KeyHasher:
-		return MixHash64(v.Hash())
+		return Mix64(v.Hash())
 	case string:
 		return Fnv64(v)
 	case int:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case uint:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case uint64:
-		return MixHash64(v)
+		return Mix64(v)
 	case int64:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case uint32:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case int32:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case uint16:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case int16:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case uint8:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case int8:
-		return MixHash64(uint64(v))
+		return Mix64(uint64(v))
 	case float64:
-		return MixHash64(math.Float64bits(v))
+		return Mix64(math.Float64bits(v))
 	case float32:
-		return MixHash64(uint64(math.Float32bits(v)))
+		return Mix64(uint64(math.Float32bits(v)))
 	case fmt.Stringer:
 		return Fnv64(v.String())
 	default:
@@ -93,8 +93,8 @@ func TypeHasher64(v interface{}) uint64 {
 	}
 }
 
-// MixHash32 mixes the hash to make sure the bits are spread, borrowed from xxhash.
-func MixHash32(h uint32) uint32 {
+// Mix32 mixes the hash to make sure the bits are spread, borrowed from xxhash.
+func Mix32(h uint32) uint32 {
 	const prime32x2 = 2246822519
 	const prime32x3 = 3266489917
 	h ^= h >> 15
@@ -105,8 +105,13 @@ func MixHash32(h uint32) uint32 {
 	return h
 }
 
-// MixHash64 mixes the hash to make sure the bits are spread, borrowed from xxhash.
-func MixHash64(h uint64) uint64 {
+// Mix64to32 is a helper to mix 64bit number down to 32.
+func Mix64to32(h uint64) uint32 {
+	return uint32(Mix64(h))
+}
+
+// Mix64 mixes the hash to make sure the bits are spread, borrowed from xxhash.
+func Mix64(h uint64) uint64 {
 	const prime64x2 = 14029467366897019727
 	const prime64x3 = 1609587929392839161
 

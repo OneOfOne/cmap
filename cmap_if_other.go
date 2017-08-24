@@ -8,6 +8,8 @@
 // +build !genx_kt_float64
 // +build !genx_kt_float32
 // +build !genx_kt_string
+// +build !genx_kt_complex64
+// +build !genx_kt_complex128
 
 package cmap
 
