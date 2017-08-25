@@ -227,9 +227,6 @@ func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
 // NumShards returns the number of shards in the map.
 func (cm *CMap) NumShards() int { return len(cm.shards) }
 
-var zero_interface interface{} // nolint
-var zero_string string         // nolint
-
 func hasher(key string) uint32 { return hashers.Fnv32(key) }
 
 // LMap is a simple sync.RWMutex locked map.

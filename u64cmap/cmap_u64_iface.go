@@ -227,9 +227,6 @@ func (cm *CMap) iterContext(ctx context.Context, ch chan<- *KV, locked bool) {
 // NumShards returns the number of shards in the map.
 func (cm *CMap) NumShards() int { return len(cm.shards) }
 
-var zero_interface interface{} // nolint
-var zero_uint64 uint64         // nolint
-
 // hasher uses Mix64to32 because it's faster on 64bit
 func hasher(key uint64) uint32 {
 	return hashers.Mix64to32(uint64(key)) // nolint:unconvert
